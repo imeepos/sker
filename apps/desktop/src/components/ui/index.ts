@@ -1,0 +1,13 @@
+// shadcn/ui 组件导出
+export { Button, buttonVariants } from './Button'
+export { Input } from './input'
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './card'
+export { ScrollArea, ScrollBar } from './scroll-area'
+export { Avatar, AvatarImage, AvatarFallback } from './avatar'
+export { Separator } from './separator'
+export { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './dialog'
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs'
+export { Label } from './label'
+export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
+export { Slider } from './slider'
+export { Switch } from './switch'

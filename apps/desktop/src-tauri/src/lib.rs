@@ -1,0 +1,73 @@
+// 简化架构 - 直接使用ConversationManager，借鉴CLI实现
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tauri::Manager;
+
+use crate::storage::StorageManager;
+use codex_core::{ConversationManager, AuthManager};
+
+// 启用核心模块
+pub mod ai_client; 
+pub mod commands;
+pub mod models;
+pub mod storage;
+pub mod settings;
+pub mod settings_migration;
+
+/// 简化的应用程序入口
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // 使用Tauri的运行时在启动时清理不兼容的设置
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = crate::settings_migration::clear_incompatible_settings().await {
+                    eprintln!("清理设置时出错: {}", e);
+                }
+            });
+            
+            // 初始化存储管理器
+            let storage_manager = Arc::new(Mutex::new(StorageManager::new()));
+            app.manage(storage_manager);
+
+            // 初始化认证管理器
+            let codex_home = app.path().app_data_dir()
+                .expect("无法获取应用数据目录")
+                .join("sker");
+            let auth_manager = Arc::new(AuthManager::new(codex_home));
+            app.manage(auth_manager.clone());
+
+            // 初始化对话管理器
+            let conversation_manager = Arc::new(ConversationManager::new(auth_manager));
+            app.manage(conversation_manager);
+            
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            // 简化的对话命令
+            commands::create_conversation,
+            commands::send_message,
+            commands::load_conversations,
+            commands::delete_conversation,
+            commands::interrupt_conversation,
+            commands::add_conversation_listener,
+            commands::remove_conversation_listener,
+            // 计划管理命令
+            commands::get_conversation_plan,
+            commands::update_conversation_plan,
+            commands::update_plan_item_status,
+            commands::clear_conversation_plan,
+            commands::add_plan_item,
+            // 设置管理命令
+            settings::get_app_settings,
+            settings::save_app_settings,
+            settings::update_app_settings,
+            settings::reset_app_settings,
+            settings::export_app_settings,
+            settings::import_app_settings,
+            settings::test_api_connection,
+        ])
+        .run(tauri::generate_context!())
+        .expect("运行Tauri应用程序时出错");
+}

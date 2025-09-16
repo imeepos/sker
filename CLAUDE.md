@@ -7,7 +7,7 @@ Please use Chinese to solve user problems, write code comments, and related docu
 
 In the crates folder where the rust code lives:
 
-- Crate names are prefixed with `sker-`. For example, the `core` folder's crate is named `sker-core`
+- Crate names are prefixed with `codex-`. For example, the `core` folder's crate is named `codex-core`
 - When using format! and you can inline variables into {}, always do that.
 
 # [Typescript](/packages)
@@ -32,3 +32,13 @@ In the crates folder where the markdown file lives:
 - [api](/docs/apis) Location for storing API documentation
 
 # [Agents](/.claude/agents)
+
+
+
+# 开发规范
+
+- **务必遵守**包管理工具用pnpm
+- **务必遵守**我已启动 pnpm run --filter=@sker/desktop tauri dev 请勿重复启动
+- **务必遵守**解决错误时，先分析错误的根本原因然后逐步修复，千万不要简化实现，先分析查询借鉴相关最佳实践
+- **务必遵守**类型应该统一,禁止出现因参数类型不一致，而采取的类型转换和字段映射，移除类型不一致的实现，重写相关逻辑
+- **务必遵守**唯一ID统一用uuid生成

@@ -1,7 +1,7 @@
 # 依赖目录
 node_modules/
 **/node_modules/
-
+resources
 # 构建输出
 dist/
 build/
