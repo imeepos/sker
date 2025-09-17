@@ -101,6 +101,18 @@ pub struct ProxyAuth {
     pub password: String,
 }
 
+// MCP 服务器配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerConfig {
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: Option<std::collections::HashMap<String, String>>,
+    pub startup_timeout_ms: Option<u32>,
+    pub enabled: bool,
+}
+
 // API 密钥集合（兼容性）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKeys {
@@ -135,6 +147,10 @@ pub struct SystemSettings {
     // 兼容性：保留原有的apiKeys字段
     #[serde(default)]
     pub api_keys: ApiKeys,
+    
+    // MCP 服务器配置
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServerConfig>,
     
     // 系统行为设置
     pub auto_start: bool,
@@ -208,6 +224,7 @@ impl Default for AppSettings {
                     openai: None,
                     anthropic: None,
                 },
+                mcp_servers: Vec::new(),
                 auto_start: false,
                 minimize_to_tray: true,
             },
@@ -473,6 +490,106 @@ pub async fn import_app_settings(data: String) -> Result<AppSettings, String> {
     
     settings_manager.import_settings(&data).await
         .map_err(|e| format!("导入设置失败: {}", e))
+}
+
+/// 获取 MCP 服务器列表
+#[tauri::command]
+pub async fn get_mcp_servers() -> Result<Vec<McpServerConfig>, String> {
+    let settings_manager = SettingsManager::new()
+        .map_err(|e| format!("创建设置管理器失败: {}", e))?;
+    
+    let settings = settings_manager.load_settings().await
+        .map_err(|e| format!("加载设置失败: {}", e))?;
+    
+    Ok(settings.system.mcp_servers)
+}
+
+/// 添加 MCP 服务器
+#[tauri::command]
+pub async fn add_mcp_server(server: McpServerConfig) -> Result<Vec<McpServerConfig>, String> {
+    let settings_manager = SettingsManager::new()
+        .map_err(|e| format!("创建设置管理器失败: {}", e))?;
+    
+    let mut settings = settings_manager.load_settings().await
+        .map_err(|e| format!("加载设置失败: {}", e))?;
+    
+    // 检查服务器名称是否已存在
+    if settings.system.mcp_servers.iter().any(|s| s.name == server.name) {
+        return Err(format!("MCP 服务器名称 '{}' 已存在", server.name));
+    }
+    
+    settings.system.mcp_servers.push(server);
+    
+    settings_manager.save_settings(&settings).await
+        .map_err(|e| format!("保存设置失败: {}", e))?;
+    
+    Ok(settings.system.mcp_servers)
+}
+
+/// 更新 MCP 服务器
+#[tauri::command]
+pub async fn update_mcp_server(name: String, server: McpServerConfig) -> Result<Vec<McpServerConfig>, String> {
+    let settings_manager = SettingsManager::new()
+        .map_err(|e| format!("创建设置管理器失败: {}", e))?;
+    
+    let mut settings = settings_manager.load_settings().await
+        .map_err(|e| format!("加载设置失败: {}", e))?;
+    
+    // 查找并更新服务器
+    if let Some(existing_server) = settings.system.mcp_servers.iter_mut().find(|s| s.name == name) {
+        *existing_server = server;
+    } else {
+        return Err(format!("MCP 服务器 '{}' 不存在", name));
+    }
+    
+    settings_manager.save_settings(&settings).await
+        .map_err(|e| format!("保存设置失败: {}", e))?;
+    
+    Ok(settings.system.mcp_servers)
+}
+
+/// 删除 MCP 服务器
+#[tauri::command]
+pub async fn delete_mcp_server(name: String) -> Result<Vec<McpServerConfig>, String> {
+    let settings_manager = SettingsManager::new()
+        .map_err(|e| format!("创建设置管理器失败: {}", e))?;
+    
+    let mut settings = settings_manager.load_settings().await
+        .map_err(|e| format!("加载设置失败: {}", e))?;
+    
+    let initial_len = settings.system.mcp_servers.len();
+    settings.system.mcp_servers.retain(|s| s.name != name);
+    
+    if settings.system.mcp_servers.len() == initial_len {
+        return Err(format!("MCP 服务器 '{}' 不存在", name));
+    }
+    
+    settings_manager.save_settings(&settings).await
+        .map_err(|e| format!("保存设置失败: {}", e))?;
+    
+    Ok(settings.system.mcp_servers)
+}
+
+/// 切换 MCP 服务器启用状态
+#[tauri::command]
+pub async fn toggle_mcp_server(name: String, enabled: bool) -> Result<Vec<McpServerConfig>, String> {
+    let settings_manager = SettingsManager::new()
+        .map_err(|e| format!("创建设置管理器失败: {}", e))?;
+    
+    let mut settings = settings_manager.load_settings().await
+        .map_err(|e| format!("加载设置失败: {}", e))?;
+    
+    // 查找并更新服务器状态
+    if let Some(server) = settings.system.mcp_servers.iter_mut().find(|s| s.name == name) {
+        server.enabled = enabled;
+    } else {
+        return Err(format!("MCP 服务器 '{}' 不存在", name));
+    }
+    
+    settings_manager.save_settings(&settings).await
+        .map_err(|e| format!("保存设置失败: {}", e))?;
+    
+    Ok(settings.system.mcp_servers)
 }
 
 /// 测试API连接

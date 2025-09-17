@@ -4,6 +4,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Card, CardContent } from '../ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { MessageAttachments } from './MessageAttachments'
+import { ToolCallCluster } from './ToolCallCluster'
 import { cn, formatTime } from '../../lib/utils'
 import { Message } from '../../types/chat'
 import { Bot, User, Loader2 } from 'lucide-react'
@@ -62,6 +63,16 @@ export function MessageBubble({ message, className }: MessageBubbleProps) {
                   attachments={message.attachments} 
                   isUser={isUser}
                 />
+              </div>
+            )}
+
+            {/* 工具调用显示 - 使用新的智能分组组件 */}
+            {message.toolCalls && message.toolCalls.length > 0 && (
+              <div className={cn(
+                "mb-3",
+                message.content && "mt-3" // 如果有内容，添加上边距
+              )}>
+                <ToolCallCluster toolCalls={message.toolCalls} />
               </div>
             )}
             

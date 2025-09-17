@@ -94,7 +94,8 @@ export const useSettingsStore = create<SettingsState>()(
             apiKeys: {
               ...DEFAULT_SETTINGS.system.apiKeys,
               ...loadedSettings.system?.apiKeys
-            }
+            },
+            mcpServers: loadedSettings.system?.mcpServers || DEFAULT_SETTINGS.system.mcpServers
           }
         }
         

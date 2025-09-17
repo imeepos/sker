@@ -2,7 +2,7 @@
 use tauri::{State, Emitter, AppHandle};
 use std::sync::Arc;
 use codex_core::{ConversationManager, NewConversation};
-use codex_core::config::{Config, ConfigToml, ConfigOverrides};
+use codex_core::config::{Config, ConfigOverrides, ConfigToml};
 use codex_core::protocol::{Op, InputItem, EventMsg};
 use codex_protocol::mcp_protocol::ConversationId;
 use crate::{
@@ -61,14 +61,54 @@ async fn create_config() -> Result<Config, String> {
     
     let show_raw_reasoning = app_settings.conversation.stream_response;
     
+    // 从应用设置中获取 MCP 服务器配置
+    let mcp_servers = get_mcp_servers_from_settings(&app_settings);
+    
+    // 创建配置，包含从设置中获取的 MCP 服务器
+    let mut config_toml = ConfigToml::default();
+    config_toml.mcp_servers = mcp_servers;
+    
     Config::load_from_base_config_with_overrides(
-        ConfigToml::default(),
+        config_toml,
         ConfigOverrides {
             show_raw_agent_reasoning: Some(show_raw_reasoning),
             ..Default::default()
         },
         codex_home,
     ).map_err(|e| format!("创建配置失败: {}", e))
+}
+
+/// 从应用设置中获取 MCP 服务器配置
+fn get_mcp_servers_from_settings(
+    app_settings: &crate::settings::AppSettings,
+) -> std::collections::HashMap<String, codex_core::config_types::McpServerConfig> {
+    let mut servers = std::collections::HashMap::new();
+    
+    // 从设置中读取启用的 MCP 服务器
+    for server in &app_settings.system.mcp_servers {
+        if server.enabled {
+            // 转换设置中的 McpServerConfig 到 core 中的 McpServerConfig
+            let core_server = codex_core::config_types::McpServerConfig {
+                command: server.command.clone(),
+                args: server.args.clone(),
+                env: server.env.clone(),
+                startup_timeout_ms: server.startup_timeout_ms.map(|v| v as u64),
+            };
+            
+            servers.insert(server.name.clone(), core_server);
+        }
+    }
+    
+    if servers.is_empty() {
+        println!("当前没有启用的 MCP 服务器。请在设置页面中添加并启用 MCP 服务器配置。");
+    } else {
+        println!("已从设置中加载 {} 个启用的 MCP 服务器配置", servers.len());
+        for name in servers.keys() {
+            println!("  - {}", name);
+        }
+    }
+    
+    servers
 }
 
 /// 创建新对话 - 直接使用ConversationManager
@@ -164,6 +204,59 @@ pub async fn send_message(
                             
                             if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &delta_event) {
                                 eprintln!("发送增量事件失败: {e}");
+                            }
+                        }
+                        EventMsg::McpToolCallBegin(tool_call_begin) => {
+                            println!("发送工具调用开始事件: {} -> {}", tool_call_begin.invocation.server, tool_call_begin.invocation.tool);
+                            let tool_call_begin_event = serde_json::json!({
+                                "type": "mcp_tool_call_begin",
+                                "call_id": tool_call_begin.call_id,
+                                "invocation": {
+                                    "server": tool_call_begin.invocation.server,
+                                    "tool": tool_call_begin.invocation.tool,
+                                    "arguments": tool_call_begin.invocation.arguments
+                                }
+                            });
+                            
+                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &tool_call_begin_event) {
+                                eprintln!("发送工具调用开始事件失败: {e}");
+                            } else {
+                                println!("工具调用开始事件发送成功");
+                            }
+                        }
+                        EventMsg::McpToolCallEnd(tool_call_end) => {
+                            println!("发送工具调用结束事件: {} -> {} (成功: {})", 
+                                tool_call_end.invocation.server, 
+                                tool_call_end.invocation.tool,
+                                tool_call_end.result.is_ok());
+                            let tool_call_end_event = serde_json::json!({
+                                "type": "mcp_tool_call_end",
+                                "call_id": tool_call_end.call_id,
+                                "invocation": {
+                                    "server": tool_call_end.invocation.server,
+                                    "tool": tool_call_end.invocation.tool,
+                                    "arguments": tool_call_end.invocation.arguments
+                                },
+                                "duration": tool_call_end.duration.as_millis(),
+                                "success": tool_call_end.result.is_ok(),
+                                "result": tool_call_end.result
+                            });
+                            
+                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &tool_call_end_event) {
+                                eprintln!("发送工具调用结束事件失败: {e}");
+                            } else {
+                                println!("工具调用结束事件发送成功");
+                            }
+                        }
+                        EventMsg::WebSearchBegin(web_search_begin) => {
+                            let web_search_begin_event = serde_json::json!({
+                                "type": "web_search_begin",
+                                "call_id": web_search_begin.call_id,
+                                "query": "web搜索"
+                            });
+                            
+                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &web_search_begin_event) {
+                                eprintln!("发送网络搜索开始事件失败: {e}");
                             }
                         }
                         EventMsg::TaskComplete(_) => {

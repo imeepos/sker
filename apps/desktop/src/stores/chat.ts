@@ -3,6 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { Message, Conversation, ModelConfig, MessageAttachment } from '../types/chat'
+import { MessageProcessor } from '../lib/message-processor'
 
 interface ChatState {
   // 状态
@@ -257,6 +258,8 @@ export const useChatStore = create<ChatState>()(
       const conversation = conversations.find(c => c.id === conversationId)
       if (!conversation) return
 
+      console.log('处理对话事件:', event.type, event)
+
       switch (event.type) {
         case 'user_message':
           if (event.content) {
@@ -319,6 +322,80 @@ export const useChatStore = create<ChatState>()(
               updateMessage(lastAiMessage.id, {
                 content: lastAiMessage.content + event.delta
               })
+            }
+          }
+          break
+
+        case 'mcp_tool_call_begin':
+          // 工具调用开始 - 使用MessageProcessor处理
+          if (event.call_id && event.invocation) {
+            const { action, message } = MessageProcessor.handleToolCallBegin(
+              conversation.messages,
+              conversationId,
+              event
+            )
+            
+            if (action === 'add') {
+              addMessage(message)
+            } else {
+              updateMessage(message.id, {
+                toolCalls: message.toolCalls
+              })
+            }
+          }
+          break
+
+        case 'mcp_tool_call_end':
+          // 工具调用结束 - 使用MessageProcessor处理
+          if (event.call_id) {
+            const result = MessageProcessor.handleToolCallEnd(
+              conversation.messages,
+              {
+                call_id: event.call_id,
+                success: event.success,
+                result: event.result,
+                duration: event.duration
+              }
+            )
+            
+            if (result) {
+              updateMessage(result.messageId, {
+                toolCalls: result.updatedToolCalls
+              })
+            }
+          }
+          break
+
+        case 'web_search_begin':
+          // Web搜索开始
+          if (event.call_id) {
+            let currentAiMessage = [...conversation.messages]
+              .reverse()
+              .find(m => m.role === 'assistant')
+            
+            const toolCall = {
+              id: event.call_id,
+              name: 'web_search',
+              arguments: { query: event.query || 'web搜索' },
+              status: 'running' as const,
+              startTime: Date.now()
+            }
+            
+            if (currentAiMessage) {
+              const existingToolCalls = currentAiMessage.toolCalls || []
+              updateMessage(currentAiMessage.id, {
+                toolCalls: [...existingToolCalls, toolCall]
+              })
+            } else {
+              const aiMessage: Message = {
+                id: `agent-${Date.now()}`,
+                conversationId,
+                role: 'assistant',
+                content: '',
+                toolCalls: [toolCall],
+                timestamp: Date.now()
+              }
+              addMessage(aiMessage)
             }
           }
           break

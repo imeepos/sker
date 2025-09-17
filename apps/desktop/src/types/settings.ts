@@ -55,10 +55,23 @@ export interface ApiConfig {
   customName?: string // 自定义provider的显示名称
 }
 
+// MCP 服务器配置
+export interface McpServerConfig {
+  name: string
+  command: string
+  args: string[]
+  env?: Record<string, string>
+  startupTimeoutMs?: number
+  enabled: boolean
+}
+
 // 系统设置
 export interface SystemSettings {
   // API 配置
   apiConfig: ApiConfig
+  
+  // MCP 服务器配置
+  mcpServers: McpServerConfig[]
   
   // 传统代理设置（用于网络代理，不是API代理）
   proxyEnabled: boolean
@@ -149,6 +162,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       provider: 'openai',
       apiKey: '',
     },
+    mcpServers: [],
     proxyEnabled: false,
     apiKeys: {},
     autoStart: false,

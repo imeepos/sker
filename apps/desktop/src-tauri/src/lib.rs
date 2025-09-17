@@ -67,6 +67,12 @@ pub fn run() {
             settings::export_app_settings,
             settings::import_app_settings,
             settings::test_api_connection,
+            // MCP 服务器管理命令
+            settings::get_mcp_servers,
+            settings::add_mcp_server,
+            settings::update_mcp_server,
+            settings::delete_mcp_server,
+            settings::toggle_mcp_server,
         ])
         .run(tauri::generate_context!())
         .expect("运行Tauri应用程序时出错");

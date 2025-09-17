@@ -10,6 +10,21 @@ export interface MessageAttachment {
   height?: number // 图片高度
 }
 
+// 工具调用状态
+export type ToolCallStatus = 'pending' | 'running' | 'success' | 'error'
+
+// 工具调用信息
+export interface ToolCall {
+  id: string
+  name: string
+  arguments: Record<string, any>
+  status: ToolCallStatus
+  result?: any
+  error?: string
+  startTime: number
+  endTime?: number
+}
+
 // 消息类型定义
 export interface Message {
   id: string
@@ -17,6 +32,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
   attachments?: MessageAttachment[] // 附件列表
+  toolCalls?: ToolCall[] // 工具调用列表
   timestamp: number
   isStreaming?: boolean
   metadata?: {

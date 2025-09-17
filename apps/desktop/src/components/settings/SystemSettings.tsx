@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../ui/switch'
 import { useSettingsStore } from '../../stores/settings'
 import { ApiProvider, ApiConfig } from '../../types/settings'
+import { McpServerManager } from './McpServerManager'
 import { Save, Eye, EyeOff, TestTube, CheckCircle, XCircle } from 'lucide-react'
 
 export function SystemSettings() {
@@ -376,6 +377,9 @@ export function SystemSettings() {
           </div>
         </CardContent>
       </Card>
+
+      {/* MCP 服务器管理 */}
+      <McpServerManager />
     </div>
   )
 }
