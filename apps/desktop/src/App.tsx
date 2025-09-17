@@ -1,17 +1,19 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ConversationSidebar } from './components/chat/ConversationSidebar'
 import { ChatWindow } from './components/chat/ChatWindow'
 import { Button } from './components/ui/Button'
 import { SettingsDialog } from './components/settings'
+import { ChatProExample } from './components/chat-pro/ChatProExample'
 import { useChatStore } from './stores/chat'
 import { useSettingsStore } from './stores/settings'
-import { Bot, Settings } from 'lucide-react'
+import { Bot, Settings, FlaskConical, ArrowLeft } from 'lucide-react'
 // 导入全局清理工具 - 确保在应用启动时清理旧的监听器
 import './utils/globalCleanup'
 
 function App() {
   const { loadConversations } = useChatStore()
   const { openSettings, loadSettings } = useSettingsStore()
+  const [showChatProExample, setShowChatProExample] = useState(false)
 
   useEffect(() => {
     // 初始化时加载对话历史和设置
@@ -34,12 +36,34 @@ function App() {
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <Bot className="w-6 h-6 text-primary" />
-            <h1 className="font-semibold text-lg">Sker Code Assistant</h1>
+            <h1 className="font-semibold text-lg">
+              {showChatProExample ? 'ChatPro 组件示例' : 'Sker Code Assistant'}
+            </h1>
           </div>
           
           <div className="flex items-center gap-2">
+            {/* ChatPro 示例切换按钮 */}
+            <Button 
+              variant={showChatProExample ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowChatProExample(!showChatProExample)}
+              className="gap-2"
+            >
+              {showChatProExample ? (
+                <>
+                  <ArrowLeft className="w-4 h-4" />
+                  返回主界面
+                </>
+              ) : (
+                <>
+                  <FlaskConical className="w-4 h-4" />
+                  ChatPro 示例
+                </>
+              )}
+            </Button>
+            
             {/* 开发模式下显示清理按钮 */}
-            {import.meta.env.DEV && (
+            {import.meta.env.DEV && !showChatProExample && (
               <Button 
                 variant="outline" 
                 size="sm"
@@ -49,29 +73,42 @@ function App() {
                 清理
               </Button>
             )}
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => openSettings()}
-              title="打开设置"
-            >
-              <Settings className="w-4 h-4" />
-            </Button>
+            
+            {!showChatProExample && (
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => openSettings()}
+                title="打开设置"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
       </header>
 
       {/* 主要内容区域 */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 左侧边栏 - 对话历史 */}
-        <div className="w-80 border-r bg-card">
-          <ConversationSidebar className="h-full border-0" />
-        </div>
+        {showChatProExample ? (
+          /* ChatPro 示例界面 */
+          <div className="flex-1">
+            <ChatProExample />
+          </div>
+        ) : (
+          /* 原始聊天界面 */
+          <>
+            {/* 左侧边栏 - 对话历史 */}
+            <div className="w-80 border-r bg-card">
+              <ConversationSidebar className="h-full border-0" />
+            </div>
 
-        {/* 主对话区域 */}
-        <div className="flex-1 flex flex-col">
-          <ChatWindow className="h-full border-0" />
-        </div>
+            {/* 主对话区域 */}
+            <div className="flex-1 flex flex-col">
+              <ChatWindow className="h-full border-0" />
+            </div>
+          </>
+        )}
       </div>
 
       {/* 状态栏（可选） */}

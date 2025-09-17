@@ -3,6 +3,7 @@ import { ToolCall, ToolCallStatus } from '../../types/chat'
 import { Card, CardContent } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { Loader2, CheckCircle, XCircle, Clock, Play } from 'lucide-react'
+import { safeJsonStringify } from '../../lib/text-formatting'
 
 interface ToolCallIndicatorProps {
   toolCall: ToolCall
@@ -94,7 +95,7 @@ export function ToolCallIndicator({ toolCall, className }: ToolCallIndicatorProp
           <div className="text-xs text-muted-foreground">
             <span className="font-medium">参数：</span>
             <code className="ml-1 px-1.5 py-0.5 bg-muted rounded text-xs">
-              {JSON.stringify(toolCall.arguments, null, 0)}
+              {safeJsonStringify(toolCall.arguments, null, 0)}
             </code>
           </div>
         )}

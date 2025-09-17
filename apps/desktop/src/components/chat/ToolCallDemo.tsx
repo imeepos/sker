@@ -3,6 +3,7 @@ import { Message, ToolCall, ToolCallStatus } from '../../types/chat'
 import { MessageBubble } from './MessageBubble'
 import { Button } from '../ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { safeJsonStringify } from '../../lib/text-formatting'
 
 // 模拟工具调用数据
 const createMockToolCall = (
@@ -90,7 +91,7 @@ export function ToolCallDemo() {
             'parse_data',
             { source: 'api', format: 'json' },
             'success',
-            JSON.stringify({
+            safeJsonStringify({
               users: [
                 { id: 1, name: 'Alice Johnson', email: 'alice@example.com', role: 'admin' },
                 { id: 2, name: 'Bob Smith', email: 'bob@example.com', role: 'user' },

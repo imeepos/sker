@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useSettingsStore } from '../../stores/settings'
 import { useChatStore } from '../../stores/chat'
 import { Download, Upload, Trash2, Database } from 'lucide-react'
+import { safeJsonStringify } from '../../lib/text-formatting'
 
 export function DataSettings() {
   const {
@@ -110,7 +111,7 @@ export function DataSettings() {
 
       switch (settings.data.exportFormat) {
         case 'json':
-          exportData = JSON.stringify(conversations, null, 2)
+          exportData = safeJsonStringify(conversations, null, 2)
           filename = `sker-conversations-${timestamp}.json`
           break
         case 'markdown':

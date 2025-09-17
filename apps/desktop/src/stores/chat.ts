@@ -3,6 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { Message, Conversation, ModelConfig, MessageAttachment } from '../types/chat'
+import { EventMsg } from '../types/protocol'
 import { MessageProcessor } from '../lib/message-processor'
 
 interface ChatState {
@@ -26,8 +27,8 @@ interface ChatState {
   setCurrentModel: (modelId: string) => void
   loadConversations: () => Promise<void>
   
-  // 简化的事件处理
-  handleConversationEvent: (conversationId: string, event: any) => void
+  // 简化的事件处理 - 使用标准协议事件类型
+  handleConversationEvent: (conversationId: string, event: EventMsg) => void
   subscribeToConversation: (conversationId: string) => Promise<() => void>
   unsubscribeFromConversation: (conversationId: string) => void
 }
@@ -252,7 +253,7 @@ export const useChatStore = create<ChatState>()(
       }
     },
     
-    // 简化的事件处理
+    // 简化的事件处理 - 使用类型安全的事件处理
     handleConversationEvent: (conversationId, event) => {
       const { conversations, addMessage, updateMessage } = get()
       const conversation = conversations.find(c => c.id === conversationId)
@@ -262,18 +263,18 @@ export const useChatStore = create<ChatState>()(
 
       switch (event.type) {
         case 'user_message':
-          if (event.content) {
+          if ('message' in event && event.message) {
             // 检查是否已经有相同内容的用户消息，避免重复
             const existingUserMessage = conversation.messages
               .reverse()
-              .find(m => m.role === 'user' && m.content === event.content)
+              .find(m => m.role === 'user' && m.content === event.message)
             
             if (!existingUserMessage) {
               const message: Message = {
                 id: `user-${Date.now()}`,
                 conversationId,
                 role: 'user',
-                content: event.content,
+                content: event.message,
                 timestamp: Date.now()
               }
               addMessage(message)
@@ -283,7 +284,7 @@ export const useChatStore = create<ChatState>()(
 
         case 'agent_message':
           // 对于完整消息，只有在没有流式传输消息时才添加
-          if (event.content) {
+          if ('message' in event && event.message) {
             const existingStreamingMessage = [...conversation.messages]
               .reverse()
               .find(m => m.role === 'assistant' && m.isStreaming)
@@ -293,7 +294,7 @@ export const useChatStore = create<ChatState>()(
                 id: `agent-${Date.now()}`,
                 conversationId,
                 role: 'assistant',
-                content: event.content,
+                content: event.message,
                 timestamp: Date.now(),
                 isStreaming: false
               }
@@ -303,7 +304,7 @@ export const useChatStore = create<ChatState>()(
           break
 
         case 'agent_message_delta':
-          if (event.delta) {
+          if ('delta' in event && event.delta) {
             let lastAiMessage = [...conversation.messages]
               .reverse()
               .find(m => m.role === 'assistant' && m.isStreaming)
@@ -328,7 +329,7 @@ export const useChatStore = create<ChatState>()(
 
         case 'mcp_tool_call_begin':
           // 工具调用开始 - 使用MessageProcessor处理
-          if (event.call_id && event.invocation) {
+          if ('call_id' in event && 'invocation' in event && event.call_id && event.invocation) {
             const { action, message } = MessageProcessor.handleToolCallBegin(
               conversation.messages,
               conversationId,
@@ -347,14 +348,15 @@ export const useChatStore = create<ChatState>()(
 
         case 'mcp_tool_call_end':
           // 工具调用结束 - 使用MessageProcessor处理
-          if (event.call_id) {
+          if ('call_id' in event && event.call_id) {
+            const success = 'result' in event && event.result && 'Ok' in event.result
             const result = MessageProcessor.handleToolCallEnd(
               conversation.messages,
               {
                 call_id: event.call_id,
-                success: event.success,
-                result: event.result,
-                duration: event.duration
+                success,
+                result: 'result' in event ? event.result : null,
+                duration: 'duration' in event ? event.duration : '0ms'
               }
             )
             
@@ -376,7 +378,7 @@ export const useChatStore = create<ChatState>()(
             const toolCall = {
               id: event.call_id,
               name: 'web_search',
-              arguments: { query: event.query || 'web搜索' },
+              arguments: { query: 'web搜索' },
               status: 'running' as const,
               startTime: Date.now()
             }
@@ -413,7 +415,7 @@ export const useChatStore = create<ChatState>()(
           break
 
         case 'error':
-          if (event.message) {
+          if ('message' in event && event.message) {
             const errorMessage: Message = {
               id: `error-${Date.now()}`,
               conversationId,
@@ -445,7 +447,7 @@ export const useChatStore = create<ChatState>()(
       try {
         const unlisten = await listen(`conversation_events_${conversationId}`, (event) => {
           console.log('收到对话事件:', conversationId, event.payload)
-          get().handleConversationEvent(conversationId, event.payload)
+          get().handleConversationEvent(conversationId, event.payload as EventMsg)
         })
         
         conversationUnsubscribers.set(conversationId, unlisten)

@@ -1,4 +1,6 @@
 import { Message, ToolCall, ToolCallStatus } from '../types/chat'
+import type { McpToolCallBeginEvent } from '../types/protocol'
+import { safeJsonStringify } from './text-formatting'
 
 /**
  * 消息处理器 - 专门处理工具调用相关的消息逻辑
@@ -23,14 +25,7 @@ export class MessageProcessor {
   static handleToolCallBegin(
     messages: Message[],
     conversationId: string,
-    event: {
-      call_id: string
-      invocation: {
-        server: string
-        tool: string
-        arguments?: any
-      }
-    }
+    event: McpToolCallBeginEvent
   ): { action: 'add' | 'update', message: Message } {
     // 查找最近的AI消息
     const latestAiMessage = [...messages]
@@ -40,9 +35,12 @@ export class MessageProcessor {
     const toolCall: ToolCall = {
       id: event.call_id,
       name: event.invocation.tool,
-      arguments: event.invocation.arguments || {},
+      arguments: (event.invocation.arguments && typeof event.invocation.arguments === 'object') 
+        ? event.invocation.arguments as Record<string, any>
+        : {},
       status: 'running',
-      startTime: Date.now()
+      startTime: Date.now(),
+      invocation: event.invocation
     }
 
     if (latestAiMessage && !latestAiMessage.isStreaming) {
@@ -79,7 +77,7 @@ export class MessageProcessor {
       call_id: string
       success: boolean
       result?: any
-      duration?: number
+      duration?: string
     }
   ): { messageId: string, updatedToolCalls: ToolCall[] } | null {
     // 查找包含该工具调用的消息
@@ -205,7 +203,7 @@ export class MessageProcessor {
   static validateToolCallArguments(args: any): boolean {
     try {
       // 基本验证 - 确保可以序列化
-      JSON.stringify(args)
+      safeJsonStringify(args)
       return true
     } catch {
       return false

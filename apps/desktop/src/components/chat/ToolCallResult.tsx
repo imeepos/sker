@@ -19,7 +19,8 @@ import {
 import { 
   detectToolResultType,
   formatAndTruncateToolResult,
-  formatJsonCompact
+  formatJsonCompact,
+  safeJsonStringify
 } from '../../lib/text-formatting'
 
 interface ToolCallResultProps {
@@ -39,7 +40,7 @@ const formatResult = (result: any, type: string) => {
         return compactJson || result
       }
       // 如果是对象，先转换为JSON再格式化
-      const jsonStr = JSON.stringify(result, null, 2)
+      const jsonStr = safeJsonStringify(result, null, 2)
       const compactJson = formatJsonCompact(jsonStr)
       return compactJson || jsonStr
     case 'text':

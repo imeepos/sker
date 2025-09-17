@@ -6,8 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // 时间格式化工具
-export function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
+export function formatTime(timestamp: number | Date): string {
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
   const now = new Date()
   const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
   

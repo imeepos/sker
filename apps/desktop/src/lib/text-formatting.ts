@@ -6,13 +6,25 @@ import { ToolCall } from '../types/chat'
  */
 
 /**
+ * 安全的JSON序列化，处理BigInt类型
+ */
+export function safeJsonStringify(obj: any, replacer?: any, space?: string | number): string {
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'bigint') {
+      return value.toString()
+    }
+    return replacer ? replacer(key, value) : value
+  }, space)
+}
+
+/**
  * 格式化JSON为紧凑单行格式，在保持可读性的同时节省空间
  * 示例: {"a":"b",c:["d","e"]} -> {"a": "b", "c": ["d", "e"]}
  */
 export function formatJsonCompact(text: string): string | null {
   try {
     const json = JSON.parse(text)
-    const prettyJson = JSON.stringify(json, null, 2)
+    const prettyJson = safeJsonStringify(json, null, 2)
     
     // 将多行JSON转换为紧凑单行格式
     let result = ''
@@ -176,7 +188,7 @@ export function canCoalesceToolCalls(toolCalls: ToolCall[]): boolean {
  */
 export function formatToolInvocation(toolCall: ToolCall): string {
   const argsStr = Object.keys(toolCall.arguments).length > 0
-    ? JSON.stringify(toolCall.arguments)
+    ? safeJsonStringify(toolCall.arguments)
     : ''
   
   return `${toolCall.name}(${argsStr})`

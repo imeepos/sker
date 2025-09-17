@@ -3,14 +3,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tauri::Manager;
 
-use crate::storage::StorageManager;
 use codex_core::{ConversationManager, AuthManager};
 
 // 启用核心模块
-pub mod ai_client; 
 pub mod commands;
 pub mod models;
-pub mod storage;
 pub mod settings;
 pub mod settings_migration;
 
@@ -27,9 +24,6 @@ pub fn run() {
                 }
             });
             
-            // 初始化存储管理器
-            let storage_manager = Arc::new(Mutex::new(StorageManager::new()));
-            app.manage(storage_manager);
 
             // 初始化认证管理器
             let codex_home = app.path().app_data_dir()
@@ -53,12 +47,6 @@ pub fn run() {
             commands::interrupt_conversation,
             commands::add_conversation_listener,
             commands::remove_conversation_listener,
-            // 计划管理命令
-            commands::get_conversation_plan,
-            commands::update_conversation_plan,
-            commands::update_plan_item_status,
-            commands::clear_conversation_plan,
-            commands::add_plan_item,
             // 设置管理命令
             settings::get_app_settings,
             settings::save_app_settings,

@@ -6,10 +6,10 @@ use codex_core::config::{Config, ConfigOverrides, ConfigToml};
 use codex_core::protocol::{Op, InputItem, EventMsg};
 use codex_protocol::mcp_protocol::ConversationId;
 use crate::{
-    models::{Conversation, SendMessageRequest, ConversationPlan, UpdatePlanRequest, UpdatePlanItemRequest, StepStatus},
-    storage::StorageManager,
+    models::{Conversation, SendMessageRequest},
     settings::{SettingsManager, ApiProvider},
 };
+use serde_json::{Map, Value};
 
 // 全局对话管理器
 type ConversationManagerHandle = Arc<ConversationManager>;
@@ -133,7 +133,7 @@ pub async fn create_conversation(
     Ok(conversation_id.to_string())
 }
 
-/// 发送消息 - 直接使用ConversationManager，借鉴CLI的事件处理模式
+/// 发送消息 - 使用符合协议规范的事件处理模式
 #[tauri::command] 
 pub async fn send_message(
     request: SendMessageRequest,
@@ -150,7 +150,7 @@ pub async fn send_message(
         .await
         .map_err(|e| format!("获取对话失败: {e}"))?;
     
-    // 启动异步事件处理，借鉴CLI的模式
+    // 启动异步事件处理，使用标准的事件处理模式
     let app_handle = app.clone();
     let conv_id = conversation_id_str.clone();
     let message_content = request.content.clone();
@@ -163,140 +163,97 @@ pub async fn send_message(
             }],
         }).await {
             eprintln!("提交用户输入失败: {e}");
-            let error_event = serde_json::json!({
-                "type": "error",
-                "message": format!("处理消息失败: {e}")
-            });
-            let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &error_event);
+            // 发送错误事件，使用前端期望的格式
+            let mut error_event = Map::new();
+            error_event.insert("type".to_string(), Value::String("error".to_string()));
+            error_event.insert("message".to_string(), Value::String(format!("处理消息失败: {e}")));
+            
+            if let Ok(event_json) = serde_json::to_string(&error_event) {
+                let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &event_json);
+            }
             return;
         }
         
-        // 事件处理循环 - 直接借鉴CLI的next_event模式
+        // 事件处理循环 - 借鉴CLI的标准模式
         loop {
-            match conversation.next_event().await {
-                Ok(event) => {
-                    match event.msg {
-                        EventMsg::UserMessage(user_msg) => {
-                            let user_event = serde_json::json!({
-                                "type": "user_message",
-                                "content": user_msg.message
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &user_event) {
-                                eprintln!("发送用户消息事件失败: {e}");
+            tokio::select! {
+                // 处理中断信号（虽然在桌面应用中可能不常用，但符合标准实践）
+                _ = tokio::signal::ctrl_c() => {
+                    println!("收到中断信号，正在停止对话...");
+                    if let Err(e) = conversation.submit(Op::Interrupt).await {
+                        eprintln!("发送中断信号失败: {e}");
+                    }
+                    break;
+                }
+                // 处理事件流
+                res = conversation.next_event() => match res {
+                    Ok(event) => {
+                        // 检查是否为关闭完成事件
+                        let is_shutdown_complete = matches!(event.msg, EventMsg::ShutdownComplete);
+                        
+                        // 将事件转换为前端期望的格式并发送
+                        let frontend_event = convert_event_to_frontend_format(&event);
+                        if let Ok(event_json) = serde_json::to_string(&frontend_event) {
+                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &event_json) {
+                                eprintln!("发送事件失败: {e}");
+                            } else {
+                                println!("成功发送事件: {:?}", frontend_event.get("type"));
                             }
+                        } else {
+                            eprintln!("序列化事件失败: {:?}", event);
                         }
-                        EventMsg::AgentMessage(agent_msg) => {
-                            let ai_event = serde_json::json!({
-                                "type": "agent_message",
-                                "content": agent_msg.message
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &ai_event) {
-                                eprintln!("发送AI消息事件失败: {e}");
-                            }
-                        }
-                        EventMsg::AgentMessageDelta(delta) => {
-                            let delta_event = serde_json::json!({
-                                "type": "agent_message_delta",
-                                "delta": delta.delta
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &delta_event) {
-                                eprintln!("发送增量事件失败: {e}");
-                            }
-                        }
-                        EventMsg::McpToolCallBegin(tool_call_begin) => {
-                            println!("发送工具调用开始事件: {} -> {}", tool_call_begin.invocation.server, tool_call_begin.invocation.tool);
-                            let tool_call_begin_event = serde_json::json!({
-                                "type": "mcp_tool_call_begin",
-                                "call_id": tool_call_begin.call_id,
-                                "invocation": {
-                                    "server": tool_call_begin.invocation.server,
-                                    "tool": tool_call_begin.invocation.tool,
-                                    "arguments": tool_call_begin.invocation.arguments
+                        
+                        // 处理生命周期管理
+                        match event.msg {
+                            EventMsg::TaskComplete(_) => {
+                                // 任务完成，但不立即退出，等待ShutdownComplete
+                                println!("任务完成，等待关闭确认...");
+                                if let Err(e) = conversation.submit(Op::Shutdown).await {
+                                    eprintln!("发送关闭信号失败: {e}");
+                                    break;
                                 }
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &tool_call_begin_event) {
-                                eprintln!("发送工具调用开始事件失败: {e}");
-                            } else {
-                                println!("工具调用开始事件发送成功");
+                            }
+                            EventMsg::ShutdownComplete => {
+                                // 真正的结束信号
+                                println!("对话已正常关闭");
+                                break;
+                            }
+                            EventMsg::Error(_) => {
+                                // 错误事件，退出循环
+                                println!("收到错误事件，结束对话");
+                                break;
+                            }
+                            EventMsg::TurnAborted(_) => {
+                                // 会话被中断
+                                println!("会话被中断");
+                                break;
+                            }
+                            _ => {
+                                // 其他事件继续处理
                             }
                         }
-                        EventMsg::McpToolCallEnd(tool_call_end) => {
-                            println!("发送工具调用结束事件: {} -> {} (成功: {})", 
-                                tool_call_end.invocation.server, 
-                                tool_call_end.invocation.tool,
-                                tool_call_end.result.is_ok());
-                            let tool_call_end_event = serde_json::json!({
-                                "type": "mcp_tool_call_end",
-                                "call_id": tool_call_end.call_id,
-                                "invocation": {
-                                    "server": tool_call_end.invocation.server,
-                                    "tool": tool_call_end.invocation.tool,
-                                    "arguments": tool_call_end.invocation.arguments
-                                },
-                                "duration": tool_call_end.duration.as_millis(),
-                                "success": tool_call_end.result.is_ok(),
-                                "result": tool_call_end.result
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &tool_call_end_event) {
-                                eprintln!("发送工具调用结束事件失败: {e}");
-                            } else {
-                                println!("工具调用结束事件发送成功");
-                            }
-                        }
-                        EventMsg::WebSearchBegin(web_search_begin) => {
-                            let web_search_begin_event = serde_json::json!({
-                                "type": "web_search_begin",
-                                "call_id": web_search_begin.call_id,
-                                "query": "web搜索"
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &web_search_begin_event) {
-                                eprintln!("发送网络搜索开始事件失败: {e}");
-                            }
-                        }
-                        EventMsg::TaskComplete(_) => {
-                            let complete_event = serde_json::json!({
-                                "type": "task_complete"
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &complete_event) {
-                                eprintln!("发送完成事件失败: {e}");
-                            }
+                        
+                        if is_shutdown_complete {
                             break;
-                        }
-                        EventMsg::Error(error_event) => {
-                            let error_event = serde_json::json!({
-                                "type": "error",
-                                "message": error_event.message
-                            });
-                            
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &error_event) {
-                                eprintln!("发送错误事件失败: {e}");
-                            }
-                            break;
-                        }
-                        _ => {
-                            // 其他事件类型，记录日志
                         }
                     }
-                }
-                Err(e) => {
-                    eprintln!("获取事件失败: {e}");
-                    let error_event = serde_json::json!({
-                        "type": "error",
-                        "message": format!("事件流错误: {e}")
-                    });
-                    
-                    let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &error_event);
-                    break;
+                    Err(e) => {
+                        eprintln!("获取事件失败: {e}");
+                        // 发送错误事件，使用前端期望的格式
+                        let mut error_event = Map::new();
+                        error_event.insert("type".to_string(), Value::String("error".to_string()));
+                        error_event.insert("message".to_string(), Value::String(format!("事件流错误: {e}")));
+                        
+                        if let Ok(event_json) = serde_json::to_string(&error_event) {
+                            let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &event_json);
+                        }
+                        break;
+                    }
                 }
             }
         }
+        
+        println!("事件处理循环结束: {}", conv_id);
     });
     
     Ok(())
@@ -318,12 +275,28 @@ pub async fn delete_conversation(
     Ok(())
 }
 
-/// 中断对话 - 暂时返回成功状态
+/// 中断对话 - 发送中断信号给对话
 #[tauri::command]
 pub async fn interrupt_conversation(
-    _conversation_id: String,
+    conversation_id: String,
+    conversation_manager: State<'_, ConversationManagerHandle>,
 ) -> Result<(), String> {
-    // TODO: 实现对话中断功能
+    println!("正在中断对话: {}", conversation_id);
+    
+    let conversation_uuid = uuid::Uuid::parse_str(&conversation_id)
+        .map_err(|_| "无效的对话ID")?;
+    
+    // 从ConversationManager获取对话实例
+    let conversation = conversation_manager
+        .get_conversation(ConversationId(conversation_uuid))
+        .await
+        .map_err(|e| format!("获取对话失败: {e}"))?;
+    
+    // 发送中断信号
+    conversation.submit(Op::Interrupt).await
+        .map_err(|e| format!("发送中断信号失败: {e}"))?;
+    
+    println!("对话中断信号已发送: {}", conversation_id);
     Ok(())
 }
 
@@ -345,127 +318,136 @@ pub async fn remove_conversation_listener(
     Ok(())
 }
 
-// ==================== 计划管理相关命令 ====================
-
-/// 获取对话计划
-#[tauri::command]
-pub async fn get_conversation_plan(
-    conversation_id: String,
-    storage: State<'_, std::sync::Arc<tokio::sync::Mutex<StorageManager>>>,
-) -> Result<Option<ConversationPlan>, String> {
-    let storage_guard = storage.lock().await;
-    storage_guard.load_conversation_plan(&conversation_id)
-        .await
-        .map_err(|e| format!("加载对话计划失败: {}", e))
-}
-
-/// 更新对话计划
-#[tauri::command]
-pub async fn update_conversation_plan(
-    request: UpdatePlanRequest,
-    storage: State<'_, std::sync::Arc<tokio::sync::Mutex<StorageManager>>>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let plan = ConversationPlan::new(
-        request.conversation_id.clone(),
-        request.explanation,
-        request.plan,
-    );
-
-    let storage_guard = storage.lock().await;
-    storage_guard.save_conversation_plan(&plan)
-        .await
-        .map_err(|e| format!("保存对话计划失败: {}", e))?;
-
-    // 发送计划更新事件到前端
-    app.emit("plan-update", serde_json::json!({
-        "conversation_id": request.conversation_id,
-        "plan": plan
-    })).map_err(|e| format!("发送计划更新事件失败: {}", e))?;
-
-    Ok(())
-}
-
-/// 更新计划项状态
-#[tauri::command]
-pub async fn update_plan_item_status(
-    request: UpdatePlanItemRequest,
-    storage: State<'_, std::sync::Arc<tokio::sync::Mutex<StorageManager>>>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let storage_guard = storage.lock().await;
-    storage_guard.update_plan_item_status(
-        &request.conversation_id,
-        request.item_index,
-        request.status.clone(),
-    )
-    .await
-    .map_err(|e| format!("更新计划项状态失败: {}", e))?;
-
-    // 重新获取更新后的计划并发送事件
-    if let Ok(Some(updated_plan)) = storage_guard.load_conversation_plan(&request.conversation_id).await {
-        app.emit("plan-item-updated", serde_json::json!({
-            "conversation_id": request.conversation_id,
-            "item_index": request.item_index,
-            "new_status": request.status,
-            "plan": updated_plan
-        })).map_err(|e| format!("发送计划项更新事件失败: {}", e))?;
+/// 将 Codex 事件转换为前端期望的格式
+fn convert_event_to_frontend_format(event: &codex_core::protocol::Event) -> Map<String, Value> {
+    let mut frontend_event = Map::new();
+    
+    match &event.msg {
+        EventMsg::UserMessage(user_msg) => {
+            frontend_event.insert("type".to_string(), Value::String("user_message".to_string()));
+            frontend_event.insert("content".to_string(), Value::String(user_msg.message.clone()));
+        }
+        EventMsg::AgentMessage(agent_msg) => {
+            frontend_event.insert("type".to_string(), Value::String("agent_message".to_string()));
+            frontend_event.insert("content".to_string(), Value::String(agent_msg.message.clone()));
+        }
+        EventMsg::AgentMessageDelta(delta) => {
+            frontend_event.insert("type".to_string(), Value::String("agent_message_delta".to_string()));
+            frontend_event.insert("delta".to_string(), Value::String(delta.delta.clone()));
+        }
+        EventMsg::McpToolCallBegin(tool_call_begin) => {
+            frontend_event.insert("type".to_string(), Value::String("mcp_tool_call_begin".to_string()));
+            frontend_event.insert("call_id".to_string(), Value::String(tool_call_begin.call_id.clone()));
+            
+            let mut invocation = Map::new();
+            invocation.insert("server".to_string(), Value::String(tool_call_begin.invocation.server.clone()));
+            invocation.insert("tool".to_string(), Value::String(tool_call_begin.invocation.tool.clone()));
+            if let Some(args) = &tool_call_begin.invocation.arguments {
+                invocation.insert("arguments".to_string(), args.clone());
+            } else {
+                invocation.insert("arguments".to_string(), Value::Null);
+            }
+            frontend_event.insert("invocation".to_string(), Value::Object(invocation));
+        }
+        EventMsg::McpToolCallEnd(tool_call_end) => {
+            frontend_event.insert("type".to_string(), Value::String("mcp_tool_call_end".to_string()));
+            frontend_event.insert("call_id".to_string(), Value::String(tool_call_end.call_id.clone()));
+            
+            let mut invocation = Map::new();
+            invocation.insert("server".to_string(), Value::String(tool_call_end.invocation.server.clone()));
+            invocation.insert("tool".to_string(), Value::String(tool_call_end.invocation.tool.clone()));
+            if let Some(args) = &tool_call_end.invocation.arguments {
+                invocation.insert("arguments".to_string(), args.clone());
+            } else {
+                invocation.insert("arguments".to_string(), Value::Null);
+            }
+            frontend_event.insert("invocation".to_string(), Value::Object(invocation));
+            
+            // 转换 Duration 为字符串格式，符合前端协议
+            frontend_event.insert("duration".to_string(), Value::String(format!("{}ms", tool_call_end.duration.as_millis())));
+            
+            // 处理 Result 类型，转换为前端期望的格式
+            match &tool_call_end.result {
+                Ok(result) => {
+                    frontend_event.insert("success".to_string(), Value::Bool(true));
+                    if let Ok(result_json) = serde_json::to_value(result) {
+                        frontend_event.insert("result".to_string(), result_json);
+                    } else {
+                        frontend_event.insert("result".to_string(), Value::Null);
+                    }
+                }
+                Err(err) => {
+                    frontend_event.insert("success".to_string(), Value::Bool(false));
+                    frontend_event.insert("result".to_string(), Value::String(err.clone()));
+                }
+            }
+        }
+        EventMsg::WebSearchBegin(web_search_begin) => {
+            frontend_event.insert("type".to_string(), Value::String("web_search_begin".to_string()));
+            frontend_event.insert("call_id".to_string(), Value::String(web_search_begin.call_id.clone()));
+            // 注意：WebSearchBegin 按协议规范不包含 query 字段
+        }
+        EventMsg::WebSearchEnd(web_search_end) => {
+            frontend_event.insert("type".to_string(), Value::String("web_search_end".to_string()));
+            frontend_event.insert("call_id".to_string(), Value::String(web_search_end.call_id.clone()));
+            frontend_event.insert("query".to_string(), Value::String(web_search_end.query.clone()));
+        }
+        EventMsg::TaskComplete(task_complete) => {
+            frontend_event.insert("type".to_string(), Value::String("task_complete".to_string()));
+            if let Some(last_message) = &task_complete.last_agent_message {
+                frontend_event.insert("last_agent_message".to_string(), Value::String(last_message.clone()));
+            } else {
+                frontend_event.insert("last_agent_message".to_string(), Value::Null);
+            }
+        }
+        EventMsg::Error(error_event) => {
+            frontend_event.insert("type".to_string(), Value::String("error".to_string()));
+            frontend_event.insert("message".to_string(), Value::String(error_event.message.clone()));
+        }
+        EventMsg::TaskStarted(_) => {
+            frontend_event.insert("type".to_string(), Value::String("task_started".to_string()));
+        }
+        EventMsg::TurnAborted(turn_aborted) => {
+            frontend_event.insert("type".to_string(), Value::String("turn_aborted".to_string()));
+            if let Ok(reason_json) = serde_json::to_value(&turn_aborted.reason) {
+                frontend_event.insert("reason".to_string(), reason_json);
+            }
+        }
+        EventMsg::ShutdownComplete => {
+            frontend_event.insert("type".to_string(), Value::String("shutdown_complete".to_string()));
+        }
+        // 对于其他事件类型，尝试直接序列化 msg 部分
+        _ => {
+            if let Ok(msg_json) = serde_json::to_value(&event.msg) {
+                if let Value::Object(mut msg_map) = msg_json {
+                    // 如果 msg 已经有 type 字段，直接使用
+                    // 否则尝试从枚举名推断
+                    if !msg_map.contains_key("type") {
+                        let type_name = match &event.msg {
+                            EventMsg::SessionConfigured(_) => "session_configured",
+                            EventMsg::StreamError(_) => "stream_error",
+                            EventMsg::BackgroundEvent(_) => "background_event", 
+                            EventMsg::TokenCount(_) => "token_count",
+                            EventMsg::ExecCommandBegin(_) => "exec_command_begin",
+                            EventMsg::ExecCommandEnd(_) => "exec_command_end",
+                            EventMsg::ExecCommandOutputDelta(_) => "exec_command_output_delta",
+                            EventMsg::PatchApplyBegin(_) => "patch_apply_begin",
+                            EventMsg::PatchApplyEnd(_) => "patch_apply_end",
+                            EventMsg::AgentReasoning(_) => "agent_reasoning",
+                            EventMsg::AgentReasoningDelta(_) => "agent_reasoning_delta",
+                            _ => "unknown"
+                        };
+                        msg_map.insert("type".to_string(), Value::String(type_name.to_string()));
+                    }
+                    return msg_map;
+                }
+            }
+            
+            // fallback: 创建最基本的事件格式
+            frontend_event.insert("type".to_string(), Value::String("unknown".to_string()));
+            frontend_event.insert("raw_event".to_string(), Value::String(format!("{:?}", event.msg)));
+        }
     }
-
-    Ok(())
-}
-
-/// 清空对话计划
-#[tauri::command]
-pub async fn clear_conversation_plan(
-    conversation_id: String,
-    storage: State<'_, std::sync::Arc<tokio::sync::Mutex<StorageManager>>>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let storage_guard = storage.lock().await;
-    storage_guard.delete_conversation_plan(&conversation_id)
-        .await
-        .map_err(|e| format!("删除对话计划失败: {}", e))?;
-
-    // 发送计划清空事件到前端
-    app.emit("plan-cleared", serde_json::json!({
-        "conversation_id": conversation_id
-    })).map_err(|e| format!("发送计划清空事件失败: {}", e))?;
-
-    Ok(())
-}
-
-/// 添加计划项
-#[tauri::command]
-pub async fn add_plan_item(
-    conversation_id: String,
-    step_text: String,
-    status: StepStatus,
-    storage: State<'_, std::sync::Arc<tokio::sync::Mutex<StorageManager>>>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let storage_guard = storage.lock().await;
     
-    // 获取现有计划或创建新计划
-    let mut plan = match storage_guard.load_conversation_plan(&conversation_id).await {
-        Ok(Some(existing_plan)) => existing_plan,
-        Ok(None) => ConversationPlan::new(conversation_id.clone(), None, Vec::new()),
-        Err(e) => return Err(format!("加载对话计划失败: {}", e)),
-    };
-
-    // 添加新项目
-    plan.add_item(step_text, status);
-    
-    // 保存更新后的计划
-    storage_guard.save_conversation_plan(&plan)
-        .await
-        .map_err(|e| format!("保存对话计划失败: {}", e))?;
-
-    // 发送计划更新事件
-    app.emit("plan-item-added", serde_json::json!({
-        "conversation_id": conversation_id,
-        "plan": plan
-    })).map_err(|e| format!("发送计划项添加事件失败: {}", e))?;
-
-    Ok(())
+    frontend_event
 }

@@ -20,7 +20,8 @@ import {
   isExploringToolCall,
   formatDuration,
   formatToolInvocation,
-  getToolCallStatusStyle
+  getToolCallStatusStyle,
+  safeJsonStringify
 } from '../../lib/text-formatting'
 
 interface ToolCallClusterProps {
@@ -262,7 +263,7 @@ function ToolCallItem({ toolCall, isCompact }: ToolCallItemProps) {
           <div className="bg-muted p-1.5 rounded max-h-16 overflow-hidden">
             {typeof toolCall.result === 'string' 
               ? toolCall.result.substring(0, 100) + (toolCall.result.length > 100 ? '...' : '')
-              : JSON.stringify(toolCall.result).substring(0, 100) + '...'
+              : safeJsonStringify(toolCall.result).substring(0, 100) + '...'
             }
           </div>
         </div>
