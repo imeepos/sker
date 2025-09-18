@@ -1,10 +1,72 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import { Message, Conversation, ModelConfig, MessageAttachment } from '../types/chat'
-import { EventMsg } from '../types/protocol'
+import { Message, Conversation, ModelConfig, MessageAttachment, ConversationEvent } from '../types/chat'
+import { 
+  EventMsg, 
+  UserMessageEvent, 
+  AgentMessageEvent, 
+  AgentMessageDeltaEvent, 
+  ErrorEvent 
+} from '../types/protocol'
+import { 
+  EventClassifier, 
+  EventAggregator, 
+  EventLayer, 
+  DEFAULT_EVENT_MERGE_CONFIG,
+  EventMergeConfig
+} from '../types/events'
+import { streamController } from '../lib/streamController'
+
+// 临时Event类型定义，直到生成正确的类型
+interface ProtocolEvent {
+  id: string
+  msg: EventMsg
+}
 import { MessageProcessor } from '../lib/message-processor'
+import { eventListenerManager } from '../services/EventListenerManager'
+
+// 初始化流控制器回调
+streamController.setOnContentUpdate((conversationId: string, messageId: string, content: string) => {
+  // 通过store更新消息内容
+  const store = useChatStore.getState()
+  store.updateStreamingMessage(conversationId, messageId, content)
+})
+
+// 消息创建辅助函数
+const createUserMessage = (conversationId: string, event: UserMessageEvent): Message => ({
+  id: `user-${Date.now()}`,
+  conversationId,
+  role: 'user',
+  content: event.message,
+  timestamp: Date.now()
+})
+
+const createAgentMessage = (conversationId: string, event: AgentMessageEvent): Message => ({
+  id: `agent-${Date.now()}`,
+  conversationId,
+  role: 'assistant',
+  content: event.message,
+  timestamp: Date.now(),
+  isStreaming: false
+})
+
+const createStreamingAgentMessage = (conversationId: string, event: AgentMessageDeltaEvent): Message => ({
+  id: `agent-${Date.now()}`,
+  conversationId,
+  role: 'assistant',
+  content: event.delta,
+  timestamp: Date.now(),
+  isStreaming: true
+})
+
+const createErrorMessage = (conversationId: string, event: ErrorEvent): Message => ({
+  id: `error-${Date.now()}`,
+  conversationId,
+  role: 'system',
+  content: `错误: ${event.message}`,
+  timestamp: Date.now()
+})
 
 interface ChatState {
   // 状态
@@ -15,6 +77,12 @@ interface ChatState {
   currentModel: string
   
   activeConversation: Conversation | null
+  // 事件存储 - 按对话ID组织
+  conversationEvents: Record<string, ConversationEvent[]>
+  // 事件聚合器实例
+  eventAggregator: EventAggregator
+  // 事件合并配置
+  eventMergeConfig: EventMergeConfig
   
   // 动作
   _updateActiveConversation: (id: string | null) => void
@@ -27,14 +95,25 @@ interface ChatState {
   setCurrentModel: (modelId: string) => void
   loadConversations: () => Promise<void>
   
+  // 事件管理
+  addConversationEvent: (conversationId: string, event: EventMsg) => void
+  addConversationEventWithId: (conversationId: string, eventId: string, event: EventMsg) => void
+  updateConversationEvent: (conversationId: string, eventId: string, updates: Partial<ConversationEvent>) => void
+  getConversationEvents: (conversationId: string) => ConversationEvent[]
+  getAggregatedEvents: (conversationId: string) => EventLayer[]
+  
+  // 新的流式事件处理 - 基于流控制器
+  handleStreamEvent: (conversationId: string, eventId: string, event: EventMsg) => void
+  updateStreamingMessage: (conversationId: string, messageId: string, content: string) => void
+  
   // 简化的事件处理 - 使用标准协议事件类型
   handleConversationEvent: (conversationId: string, event: EventMsg) => void
+  handleConversationEventWithId: (conversationId: string, eventId: string, event: EventMsg) => void
+  processEventMessage: (conversationId: string, event: EventMsg) => void
   subscribeToConversation: (conversationId: string) => Promise<() => void>
   unsubscribeFromConversation: (conversationId: string) => void
 }
 
-// 对话监听器管理
-const conversationUnsubscribers = new Map<string, () => void>()
 
 export const useChatStore = create<ChatState>()(
   subscribeWithSelector((set, get) => ({
@@ -43,6 +122,9 @@ export const useChatStore = create<ChatState>()(
     activeConversationId: null,
     activeConversation: null,
     isLoading: false,
+    conversationEvents: {},
+    eventAggregator: new EventAggregator(DEFAULT_EVENT_MERGE_CONFIG),
+    eventMergeConfig: DEFAULT_EVENT_MERGE_CONFIG,
     models: [
       {
         id: 'gpt-4',
@@ -158,14 +240,9 @@ export const useChatStore = create<ChatState>()(
       } catch (error) {
         console.error('发送消息失败:', error)
         
-        // 手动添加错误消息
-        const errorMessage: Message = {
-          id: `error-${Date.now()}`,
-          conversationId: activeConversationId,
-          role: 'system',
-          content: `错误: ${error}`,
-          timestamp: Date.now()
-        }
+        // 使用统一的错误消息创建函数
+        const errorEvent: ErrorEvent = { message: String(error) }
+        const errorMessage = createErrorMessage(activeConversationId, errorEvent)
         get().addMessage(errorMessage)
       } finally {
         set({ isLoading: false })
@@ -228,9 +305,14 @@ export const useChatStore = create<ChatState>()(
         unsubscribeFromConversation(id)
       }
       
-      set(state => ({
-        conversations: state.conversations.filter(c => c.id !== id)
-      }))
+      set(state => {
+        // 删除对话和对应的事件
+        const { [id]: deletedEvents, ...restEvents } = state.conversationEvents
+        return {
+          conversations: state.conversations.filter(c => c.id !== id),
+          conversationEvents: restEvents
+        }
+      })
       
       // 更新活跃对话状态
       const newActiveId = activeConversationId === id ? null : activeConversationId
@@ -253,87 +335,269 @@ export const useChatStore = create<ChatState>()(
       }
     },
     
+    // 事件管理函数
+    addConversationEvent: (conversationId, event) => {
+      const conversationEvent: ConversationEvent = {
+        id: `event-${Date.now()}-${Math.random()}`,
+        conversationId,
+        event,
+        timestamp: Date.now(),
+        status: event.type === 'error' ? 'error' : 
+                event.type === 'task_complete' ? 'completed' : 
+                event.type.includes('begin') ? 'processing' : 'completed'
+      }
+      
+      set(state => ({
+        conversationEvents: {
+          ...state.conversationEvents,
+          [conversationId]: [...(state.conversationEvents[conversationId] || []), conversationEvent]
+        }
+      }))
+    },
+
+    // 带特定事件ID的事件管理函数
+    addConversationEventWithId: (conversationId: string, eventId: string, event: EventMsg) => {
+      const conversationEvent: ConversationEvent = {
+        id: eventId, // 使用后端提供的真实事件ID
+        conversationId,
+        event,
+        timestamp: Date.now(),
+        status: event.type === 'error' ? 'error' : 
+                event.type === 'task_complete' ? 'completed' : 
+                event.type.includes('begin') ? 'processing' : 'completed'
+      }
+      
+      set(state => ({
+        conversationEvents: {
+          ...state.conversationEvents,
+          [conversationId]: [...(state.conversationEvents[conversationId] || []), conversationEvent]
+        }
+      }))
+    },
+    
+    updateConversationEvent: (conversationId, eventId, updates) => {
+      set(state => ({
+        conversationEvents: {
+          ...state.conversationEvents,
+          [conversationId]: (state.conversationEvents[conversationId] || []).map(evt => 
+            evt.id === eventId ? { ...evt, ...updates } : evt
+          )
+        }
+      }))
+    },
+    
+    getConversationEvents: (conversationId) => {
+      return get().conversationEvents[conversationId] || []
+    },
+    
+    getAggregatedEvents: (conversationId) => {
+      const { conversationEvents, eventAggregator } = get()
+      const events = conversationEvents[conversationId] || []
+      return eventAggregator.aggregateEvents(events)
+    },
+    
+    // 新的流式事件处理 - 基于流控制器
+    handleStreamEvent: (conversationId, eventId, event) => {
+      const { addConversationEventWithId, updateConversationEvent, conversationEvents } = get()
+      
+      // 对于审批事件和生命周期事件，必须保留原始ID
+      const isApprovalEvent = event.type === 'exec_approval_request' || event.type === 'apply_patch_approval_request'
+      const isLifecycleEvent = EventClassifier.isLifecycleBegin(event.type) || EventClassifier.isLifecycleEnd(event.type)
+      
+      // 只为普通事件且ID为"0"的情况生成新ID
+      const safeEventId = (isApprovalEvent || isLifecycleEvent) ? eventId : 
+        (eventId && eventId !== "0" 
+          ? eventId 
+          : `${event.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+      
+      console.log('[StreamController] 处理事件:', safeEventId, event.type, 
+        isApprovalEvent ? '(审批事件)' : isLifecycleEvent ? '(生命周期事件)' : '')
+      
+      // 统一的事件处理流程
+      switch (event.type) {
+        case 'agent_message': {
+          const agentEvent = event as any
+          streamController.applyFinalMessage(conversationId, safeEventId, agentEvent.message)
+          break
+        }
+        
+        case 'agent_message_delta': {
+          const deltaEvent = event as any
+          streamController.pushDelta(conversationId, safeEventId, deltaEvent.delta)
+          break
+        }
+        
+        case 'task_complete': {
+          // 完成所有流
+          streamController.finalizeAllStreams(conversationId)
+          break
+        }
+        
+        case 'task_started': {
+          // 开始新的任务流
+          streamController.beginStream(conversationId, safeEventId)
+          break
+        }
+        
+        default:
+          // 其他事件直接处理，不使用流控制器
+          break
+      }
+      
+      // 处理生命周期事件的状态更新
+      if (isLifecycleEvent) {
+        const events = conversationEvents[conversationId] || []
+        
+        if (EventClassifier.isLifecycleEnd(event.type)) {
+          const callId = (event as any).call_id
+          if (callId) {
+            // 查找对应的开始事件并更新状态
+            const beginEvent = events
+              .slice()
+              .reverse()
+              .find(e => {
+                const eCallId = (e.event as any).call_id
+                const partnerType = EventClassifier.getLifecyclePartner(event.type)
+                return eCallId === callId && e.event.type === partnerType
+              })
+            
+            if (beginEvent) {
+              console.log('[StreamController] 更新生命周期开始事件状态:', beginEvent.id, '完成状态:', 
+                (event as any).status === 'error' ? 'error' : 'completed')
+              updateConversationEvent(conversationId, beginEvent.id, {
+                status: (event as any).status === 'error' ? 'error' : 'completed'
+              })
+            }
+          }
+        }
+      }
+      
+      // 添加事件到存储
+      addConversationEventWithId(conversationId, safeEventId, event)
+      
+      // 处理其他消息逻辑（非流式部分）
+      get().processEventMessage(conversationId, event)
+    },
+    
+    // 更新流式消息内容
+    updateStreamingMessage: (conversationId, messageId, content) => {
+      const { conversations, updateMessage } = get()
+      const conversation = conversations.find(c => c.id === conversationId)
+      if (!conversation) return
+      
+      // 查找或创建对应的消息
+      let targetMessage = conversation.messages.find(m => m.id === messageId)
+      
+      if (!targetMessage) {
+        // 创建新的流式消息
+        const newMessage: Message = {
+          id: messageId,
+          conversationId,
+          role: 'assistant',
+          content,
+          timestamp: Date.now(),
+          isStreaming: true
+        }
+        get().addMessage(newMessage)
+      } else {
+        // 更新现有消息
+        updateMessage(messageId, { 
+          content, 
+          isStreaming: true 
+        })
+      }
+    },
+    
+    // 带特定事件ID的事件处理函数
+    handleConversationEventWithId: (conversationId, eventId, event) => {
+      const { addConversationEventWithId, conversations } = get()
+      const conversation = conversations.find(c => c.id === conversationId)
+      if (!conversation) return
+
+      console.log('处理对话事件（带ID）:', eventId, event.type, event)
+      
+      // 使用真实的事件ID添加到事件存储中
+      addConversationEventWithId(conversationId, eventId, event)
+
+      // 复用现有的事件处理逻辑
+      get().processEventMessage(conversationId, event)
+    },
+
     // 简化的事件处理 - 使用类型安全的事件处理
     handleConversationEvent: (conversationId, event) => {
-      const { conversations, addMessage, updateMessage } = get()
+      const { conversations, addConversationEvent } = get()
       const conversation = conversations.find(c => c.id === conversationId)
       if (!conversation) return
 
       console.log('处理对话事件:', event.type, event)
+      
+      // 首先将所有事件添加到事件存储中
+      addConversationEvent(conversationId, event)
+
+      // 处理事件消息
+      get().processEventMessage(conversationId, event)
+    },
+
+    // 抽取的公共事件消息处理逻辑
+    processEventMessage: (conversationId, event) => {
+      const { conversations, addMessage, updateMessage } = get()
+      const conversation = conversations.find(c => c.id === conversationId)
+      if (!conversation) return
 
       switch (event.type) {
-        case 'user_message':
-          if ('message' in event && event.message) {
-            // 检查是否已经有相同内容的用户消息，避免重复
-            const existingUserMessage = conversation.messages
-              .reverse()
-              .find(m => m.role === 'user' && m.content === event.message)
-            
-            if (!existingUserMessage) {
-              const message: Message = {
-                id: `user-${Date.now()}`,
-                conversationId,
-                role: 'user',
-                content: event.message,
-                timestamp: Date.now()
-              }
-              addMessage(message)
-            }
+        case 'user_message': {
+          const userEvent = event as EventMsg & { type: 'user_message' }
+          // 检查是否已经有相同内容的用户消息，避免重复
+          const existingUserMessage = conversation.messages
+            .reverse()
+            .find(m => m.role === 'user' && m.content === userEvent.message)
+          
+          if (!existingUserMessage) {
+            const message = createUserMessage(conversationId, userEvent)
+            addMessage(message)
           }
           break
+        }
 
-        case 'agent_message':
+        case 'agent_message': {
+          const agentEvent = event as EventMsg & { type: 'agent_message' }
           // 对于完整消息，只有在没有流式传输消息时才添加
-          if ('message' in event && event.message) {
-            const existingStreamingMessage = [...conversation.messages]
-              .reverse()
-              .find(m => m.role === 'assistant' && m.isStreaming)
-            
-            if (!existingStreamingMessage) {
-              const aiMessage: Message = {
-                id: `agent-${Date.now()}`,
-                conversationId,
-                role: 'assistant',
-                content: event.message,
-                timestamp: Date.now(),
-                isStreaming: false
-              }
-              addMessage(aiMessage)
-            }
+          const existingStreamingMessage = [...conversation.messages]
+            .reverse()
+            .find(m => m.role === 'assistant' && m.isStreaming)
+          
+          if (!existingStreamingMessage) {
+            const message = createAgentMessage(conversationId, agentEvent)
+            addMessage(message)
           }
           break
+        }
 
-        case 'agent_message_delta':
-          if ('delta' in event && event.delta) {
-            let lastAiMessage = [...conversation.messages]
-              .reverse()
-              .find(m => m.role === 'assistant' && m.isStreaming)
-            
-            if (!lastAiMessage) {
-              const newAiMessage: Message = {
-                id: `agent-${Date.now()}`,
-                conversationId,
-                role: 'assistant',
-                content: event.delta,
-                timestamp: Date.now(),
-                isStreaming: true
-              }
-              addMessage(newAiMessage)
-            } else {
-              updateMessage(lastAiMessage.id, {
-                content: lastAiMessage.content + event.delta
-              })
-            }
+        case 'agent_message_delta': {
+          const deltaEvent = event as EventMsg & { type: 'agent_message_delta' }
+          let lastAiMessage = [...conversation.messages]
+            .reverse()
+            .find(m => m.role === 'assistant' && m.isStreaming)
+          
+          if (!lastAiMessage) {
+            const message = createStreamingAgentMessage(conversationId, deltaEvent)
+            addMessage(message)
+          } else {
+            updateMessage(lastAiMessage.id, {
+              content: lastAiMessage.content + deltaEvent.delta
+            })
           }
           break
+        }
 
-        case 'mcp_tool_call_begin':
+        case 'mcp_tool_call_begin': {
+          const toolEvent = event as EventMsg & { type: 'mcp_tool_call_begin' }
           // 工具调用开始 - 使用MessageProcessor处理
-          if ('call_id' in event && 'invocation' in event && event.call_id && event.invocation) {
+          if (toolEvent.call_id && toolEvent.invocation) {
             const { action, message } = MessageProcessor.handleToolCallBegin(
               conversation.messages,
               conversationId,
-              event
+              toolEvent
             )
             
             if (action === 'add') {
@@ -345,18 +609,20 @@ export const useChatStore = create<ChatState>()(
             }
           }
           break
+        }
 
-        case 'mcp_tool_call_end':
+        case 'mcp_tool_call_end': {
+          const toolEndEvent = event as EventMsg & { type: 'mcp_tool_call_end' }
           // 工具调用结束 - 使用MessageProcessor处理
-          if ('call_id' in event && event.call_id) {
-            const success = 'result' in event && event.result && 'Ok' in event.result
+          if (toolEndEvent.call_id) {
+            const success = 'result' in toolEndEvent && toolEndEvent.result && 'Ok' in toolEndEvent.result
             const result = MessageProcessor.handleToolCallEnd(
               conversation.messages,
               {
-                call_id: event.call_id,
+                call_id: toolEndEvent.call_id,
                 success,
-                result: 'result' in event ? event.result : null,
-                duration: 'duration' in event ? event.duration : '0ms'
+                result: 'result' in toolEndEvent ? toolEndEvent.result : null,
+                duration: 'duration' in toolEndEvent ? toolEndEvent.duration : '0ms'
               }
             )
             
@@ -367,16 +633,18 @@ export const useChatStore = create<ChatState>()(
             }
           }
           break
+        }
 
-        case 'web_search_begin':
+        case 'web_search_begin': {
+          const webSearchEvent = event as EventMsg & { type: 'web_search_begin' }
           // Web搜索开始
-          if (event.call_id) {
+          if (webSearchEvent.call_id) {
             let currentAiMessage = [...conversation.messages]
               .reverse()
               .find(m => m.role === 'assistant')
             
             const toolCall = {
-              id: event.call_id,
+              id: webSearchEvent.call_id,
               name: 'web_search',
               arguments: { query: 'web搜索' },
               status: 'running' as const,
@@ -401,58 +669,96 @@ export const useChatStore = create<ChatState>()(
             }
           }
           break
+        }
 
-        case 'task_complete':
+        case 'task_complete': {
+          // 结束所有流式消息
           const streamingMessage = [...conversation.messages]
             .reverse()
             .find(m => m.role === 'assistant' && m.isStreaming)
           
           if (streamingMessage) {
+            console.log('任务完成，结束流式消息:', streamingMessage.id)
             updateMessage(streamingMessage.id, {
               isStreaming: false
             })
           }
+          
+          // 同时更新相关的处理中事件状态为完成
+          const processingEvents = (get().conversationEvents[conversationId] || [])
+            .filter(e => e.status === 'processing')
+          
+          processingEvents.forEach(evt => {
+            get().updateConversationEvent(conversationId, evt.id, {
+              status: 'completed'
+            })
+          })
+          
           break
+        }
 
-        case 'error':
-          if ('message' in event && event.message) {
-            const errorMessage: Message = {
-              id: `error-${Date.now()}`,
-              conversationId,
-              role: 'system',
-              content: `错误: ${event.message}`,
-              timestamp: Date.now()
-            }
-            addMessage(errorMessage)
-          }
+        case 'error': {
+          const errorEvent = event as EventMsg & { type: 'error' }
+          const errorMessage = createErrorMessage(conversationId, errorEvent)
+          addMessage(errorMessage)
           break
+        }
+
+        case 'exec_approval_request':
+        case 'apply_patch_approval_request':
+        case 'session_configured':
+        case 'background_event':
+        case 'stream_error':
+        case 'patch_apply_begin':
+        case 'patch_apply_end':
+        case 'turn_diff':
+        case 'get_history_entry_response':
+        case 'mcp_list_tools_response':
+        case 'list_custom_prompts_response':
+        case 'plan_update':
+        case 'turn_aborted':
+        case 'conversation_path':
+        case 'entered_review_mode':
+        case 'exited_review_mode':
+        case 'agent_reasoning':
+        case 'agent_reasoning_delta':
+        case 'agent_reasoning_raw_content':
+        case 'agent_reasoning_raw_content_delta':
+        case 'agent_reasoning_section_break': {
+          // 这些事件只存储在事件列表中，不需要创建消息
+          console.log('处理系统事件:', event.type, event)
+          break
+        }
 
         default:
-          console.log('未处理的事件:', event)
+          console.log('未知事件类型:', event.type, event)
       }
     },
 
-    // 订阅对话事件流 - 直接使用Tauri事件系统
+    // 订阅对话事件流 - 使用EventListenerManager
     subscribeToConversation: async (conversationId) => {
       console.log('开始订阅对话事件:', conversationId)
       
-      // 先检查是否已经有订阅，如果有则先取消
-      const existingUnlisten = conversationUnsubscribers.get(conversationId)
-      if (existingUnlisten) {
-        console.log('发现已存在的订阅，先取消:', conversationId)
-        existingUnlisten()
-        conversationUnsubscribers.delete(conversationId)
-      }
+      const eventName = `conversation_events_${conversationId}`
       
       try {
-        const unlisten = await listen(`conversation_events_${conversationId}`, (event) => {
-          console.log('收到对话事件:', conversationId, event.payload)
-          get().handleConversationEvent(conversationId, event.payload as EventMsg)
+        await eventListenerManager.addListener(eventName, (tauri_event: any) => {
+          const fullEvent = tauri_event.payload
+          console.log('收到对话事件:', conversationId, fullEvent)
+          
+          // 检查是否是完整的Event对象（包含id和msg）
+          if (fullEvent && typeof fullEvent === 'object' && 'id' in fullEvent && 'msg' in fullEvent) {
+            // 新格式：完整的Event对象 - 使用流式处理
+            const protocolEvent = fullEvent as ProtocolEvent
+            get().handleStreamEvent(conversationId, protocolEvent.id, protocolEvent.msg)
+          } else {
+            // 兼容旧格式：只有EventMsg
+            get().handleConversationEvent(conversationId, fullEvent as EventMsg)
+          }
         })
         
-        conversationUnsubscribers.set(conversationId, unlisten)
         console.log('对话事件订阅成功:', conversationId)
-        return unlisten
+        return () => eventListenerManager.removeListener(eventName)
       } catch (error) {
         console.error('订阅对话事件失败:', error)
         throw error
@@ -461,11 +767,8 @@ export const useChatStore = create<ChatState>()(
 
     // 取消订阅对话事件
     unsubscribeFromConversation: (conversationId) => {
-      const unlisten = conversationUnsubscribers.get(conversationId)
-      if (unlisten) {
-        unlisten()
-        conversationUnsubscribers.delete(conversationId)
-      }
+      const eventName = `conversation_events_${conversationId}`
+      eventListenerManager.removeListener(eventName)
     }
   }))
 )

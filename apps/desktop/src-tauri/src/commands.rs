@@ -9,7 +9,6 @@ use crate::{
     models::{Conversation, SendMessageRequest},
     settings::{SettingsManager, ApiProvider},
 };
-use serde_json::{Map, Value};
 
 // 全局对话管理器
 type ConversationManagerHandle = Arc<ConversationManager>;
@@ -63,11 +62,13 @@ async fn create_config() -> Result<Config, String> {
     
     // 从应用设置中获取 MCP 服务器配置
     let mcp_servers = get_mcp_servers_from_settings(&app_settings);
+    println!("MCP服务器配置加载完成，数量: {}", mcp_servers.len());
     
     // 创建配置，包含从设置中获取的 MCP 服务器
     let mut config_toml = ConfigToml::default();
     config_toml.mcp_servers = mcp_servers;
     
+    println!("开始创建Codex配置...");
     Config::load_from_base_config_with_overrides(
         config_toml,
         ConfigOverrides {
@@ -75,7 +76,10 @@ async fn create_config() -> Result<Config, String> {
             ..Default::default()
         },
         codex_home,
-    ).map_err(|e| format!("创建配置失败: {}", e))
+    ).map_err(|e| {
+        eprintln!("创建配置失败详情: {:#}", e);
+        format!("创建配置失败: {}", e)
+    })
 }
 
 /// 从应用设置中获取 MCP 服务器配置
@@ -118,17 +122,39 @@ pub async fn create_conversation(
 ) -> Result<String, String> {
     println!("开始创建新对话...");
     
-    let config = create_config().await?;
+    // 创建配置时增加更详细的错误处理
+    let config = match create_config().await {
+        Ok(config) => {
+            println!("配置创建成功");
+            config
+        }
+        Err(e) => {
+            eprintln!("配置创建失败: {}", e);
+            return Err(format!("配置创建失败: {}", e));
+        }
+    };
     
-    let NewConversation {
-        conversation_id,
-        conversation: _,
-        session_configured: _,
-    } = conversation_manager
+    // 创建对话时增加更详细的错误处理
+    let new_conversation: NewConversation = conversation_manager
         .new_conversation(config)
         .await
-        .map_err(|e| format!("创建对话失败: {}", e))?;
+        .map_err(|e| {
+            eprintln!("创建对话失败详情: {:#}", e);
+            
+            // 检查具体错误类型提供更有用的信息
+            if let Some(codex_err) = e.downcast_ref::<codex_core::error::CodexErr>() {
+                match codex_err {
+                    codex_core::error::CodexErr::InternalAgentDied => {
+                        "创建对话时agent loop异常终止，请检查API配置和MCP服务器设置".to_string()
+                    }
+                    _ => format!("创建对话失败: {}", e)
+                }
+            } else {
+                format!("创建对话失败: {}", e)
+            }
+        })?;
     
+    let conversation_id = new_conversation.conversation_id;
     println!("成功创建对话: {}", conversation_id);
     Ok(conversation_id.to_string())
 }
@@ -156,6 +182,8 @@ pub async fn send_message(
     let message_content = request.content.clone();
     
     tokio::spawn(async move {
+        println!("开始提交用户输入: {}", message_content);
+        
         // 提交用户输入
         if let Err(e) = conversation.submit(Op::UserInput {
             items: vec![InputItem::Text {
@@ -163,16 +191,15 @@ pub async fn send_message(
             }],
         }).await {
             eprintln!("提交用户输入失败: {e}");
-            // 发送错误事件，使用前端期望的格式
-            let mut error_event = Map::new();
-            error_event.insert("type".to_string(), Value::String("error".to_string()));
-            error_event.insert("message".to_string(), Value::String(format!("处理消息失败: {e}")));
+            eprintln!("错误详情: {e:#}");
             
-            if let Ok(event_json) = serde_json::to_string(&error_event) {
-                let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &event_json);
-            }
+            // 发送详细错误信息到前端
+            let error_msg = format!("处理消息失败: {e:#}");
+            let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &error_msg);
             return;
         }
+        
+        println!("用户输入提交成功，开始事件循环");
         
         // 事件处理循环 - 借鉴CLI的标准模式
         loop {
@@ -191,16 +218,11 @@ pub async fn send_message(
                         // 检查是否为关闭完成事件
                         let is_shutdown_complete = matches!(event.msg, EventMsg::ShutdownComplete);
                         
-                        // 将事件转换为前端期望的格式并发送
-                        let frontend_event = convert_event_to_frontend_format(&event);
-                        if let Ok(event_json) = serde_json::to_string(&frontend_event) {
-                            if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &event_json) {
-                                eprintln!("发送事件失败: {e}");
-                            } else {
-                                println!("成功发送事件: {:?}", frontend_event.get("type"));
-                            }
+                        // 发送完整的事件对象到前端（包含ID和消息）
+                        if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &event) {
+                            eprintln!("发送事件失败: {e}");
                         } else {
-                            eprintln!("序列化事件失败: {:?}", event);
+                            println!("成功发送事件");
                         }
                         
                         // 处理生命周期管理
@@ -239,21 +261,32 @@ pub async fn send_message(
                     }
                     Err(e) => {
                         eprintln!("获取事件失败: {e}");
-                        // 发送错误事件，使用前端期望的格式
-                        let mut error_event = Map::new();
-                        error_event.insert("type".to_string(), Value::String("error".to_string()));
-                        error_event.insert("message".to_string(), Value::String(format!("事件流错误: {e}")));
+                        eprintln!("错误详情: {e:#}");
                         
-                        if let Ok(event_json) = serde_json::to_string(&error_event) {
-                            let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &event_json);
+                        // 检查是否是agent loop死掉的错误
+                        if let Some(codex_err) = e.downcast_ref::<codex_core::error::CodexErr>() {
+                            match codex_err {
+                                codex_core::error::CodexErr::InternalAgentDied => {
+                                    eprintln!("检测到agent loop异常终止，可能原因：");
+                                    eprintln!("1. API密钥配置错误");
+                                    eprintln!("2. MCP服务器启动失败");
+                                    eprintln!("3. 模型配置问题");
+                                    eprintln!("4. 权限或网络问题");
+                                }
+                                _ => {}
+                            }
                         }
+                        
+                        // 发送详细错误消息到前端
+                        let error_msg = format!("事件流错误: {e:#}");
+                        let _ = app_handle.emit(&format!("conversation_events_{}", conv_id), &error_msg);
                         break;
                     }
                 }
             }
         }
         
-        println!("事件处理循环结束: {}", conv_id);
+        println!("对话 {} 事件处理完成", conv_id);
     });
     
     Ok(())
@@ -309,6 +342,154 @@ pub async fn add_conversation_listener(
     Ok(())
 }
 
+/// 处理执行命令审批
+#[tauri::command]
+pub async fn approve_exec_command(
+    conversation_id: String,
+    approval_id: String,
+    decision: String, // "approved" | "approved_for_session" | "denied" | "abort"
+    conversation_manager: State<'_, ConversationManagerHandle>,
+) -> Result<(), String> {
+    println!("处理执行命令审批: {} -> {}", approval_id, decision);
+    
+    let conversation_uuid = uuid::Uuid::parse_str(&conversation_id)
+        .map_err(|_| "无效的对话ID")?;
+    
+    // 从ConversationManager获取对话实例
+    let conversation = conversation_manager
+        .get_conversation(ConversationId(conversation_uuid))
+        .await
+        .map_err(|e| format!("获取对话失败: {e}"))?;
+    
+    // 解析审批决策
+    let review_decision = match decision.as_str() {
+        "approved" => codex_core::protocol::ReviewDecision::Approved,
+        "approved_for_session" => codex_core::protocol::ReviewDecision::ApprovedForSession,
+        "denied" => codex_core::protocol::ReviewDecision::Denied,
+        "abort" => codex_core::protocol::ReviewDecision::Abort,
+        _ => return Err(format!("无效的审批决策: {}", decision)),
+    };
+    
+    // 提交审批决策
+    conversation.submit(Op::ExecApproval {
+        id: approval_id,
+        decision: review_decision,
+    }).await
+        .map_err(|e| format!("提交审批决策失败: {e}"))?;
+    
+    println!("审批决策已提交: {}", decision);
+    Ok(())
+}
+
+/// 处理补丁应用审批
+#[tauri::command]
+pub async fn approve_patch_command(
+    conversation_id: String,
+    approval_id: String,
+    decision: String, // "approved" | "approved_for_session" | "denied" | "abort"
+    conversation_manager: State<'_, ConversationManagerHandle>,
+) -> Result<(), String> {
+    println!("处理补丁应用审批: {} -> {}", approval_id, decision);
+    
+    let conversation_uuid = uuid::Uuid::parse_str(&conversation_id)
+        .map_err(|_| "无效的对话ID")?;
+    
+    // 从ConversationManager获取对话实例
+    let conversation = conversation_manager
+        .get_conversation(ConversationId(conversation_uuid))
+        .await
+        .map_err(|e| format!("获取对话失败: {e}"))?;
+    
+    // 解析审批决策
+    let review_decision = match decision.as_str() {
+        "approved" => codex_core::protocol::ReviewDecision::Approved,
+        "approved_for_session" => codex_core::protocol::ReviewDecision::ApprovedForSession,
+        "denied" => codex_core::protocol::ReviewDecision::Denied,
+        "abort" => codex_core::protocol::ReviewDecision::Abort,
+        _ => return Err(format!("无效的审批决策: {}", decision)),
+    };
+    
+    // 提交审批决策
+    conversation.submit(Op::PatchApproval {
+        id: approval_id,
+        decision: review_decision,
+    }).await
+        .map_err(|e| format!("提交审批决策失败: {e}"))?;
+    
+    println!("补丁审批决策已提交: {}", decision);
+    Ok(())
+}
+
+/// 诊断系统配置状态
+#[tauri::command]
+pub async fn diagnose_system() -> Result<String, String> {
+    let mut report = Vec::new();
+    
+    // 检查配置创建
+    report.push("=== 系统诊断报告 ===".to_string());
+    
+    match create_config().await {
+        Ok(_) => {
+            report.push("✅ 配置创建成功".to_string());
+        }
+        Err(e) => {
+            report.push(format!("❌ 配置创建失败: {}", e));
+        }
+    }
+    
+    // 检查环境变量
+    report.push("\n=== 环境变量检查 ===".to_string());
+    if std::env::var("OPENAI_API_KEY").is_ok() {
+        report.push("✅ OPENAI_API_KEY 已设置".to_string());
+    } else {
+        report.push("❌ OPENAI_API_KEY 未设置".to_string());
+    }
+    
+    if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+        report.push("✅ ANTHROPIC_API_KEY 已设置".to_string());
+    } else {
+        report.push("❌ ANTHROPIC_API_KEY 未设置".to_string());
+    }
+    
+    // 检查设置
+    report.push("\n=== 应用设置检查 ===".to_string());
+    
+    // 使用嵌套块来避免跨await边界的Send问题
+    let settings_section = async {
+        let settings_manager = SettingsManager::new()
+            .map_err(|e| format!("❌ 设置管理器创建失败: {}", e))?;
+            
+        let app_settings = settings_manager.load_settings().await
+            .map_err(|e| format!("❌ 应用设置加载失败: {}", e))?;
+            
+        let mut section_report = Vec::new();
+        section_report.push("✅ 应用设置加载成功".to_string());
+        section_report.push(format!("API提供商: {:?}", app_settings.system.api_config.provider));
+        
+        if app_settings.system.api_config.api_key.is_empty() {
+            section_report.push("❌ API密钥未配置".to_string());
+        } else {
+            section_report.push("✅ API密钥已配置".to_string());
+        }
+        
+        let enabled_mcp_count = app_settings.system.mcp_servers.iter().filter(|s| s.enabled).count();
+        section_report.push(format!("MCP服务器: {} 个已启用", enabled_mcp_count));
+        
+        Ok::<Vec<String>, String>(section_report)
+    }.await;
+    
+    match settings_section {
+        Ok(mut section_lines) => {
+            report.append(&mut section_lines);
+        }
+        Err(error_msg) => {
+            report.push(error_msg);
+        }
+    }
+    
+    Ok(report.join("\n"))
+}
+
 /// 移除对话监听器 - 简化实现
 #[tauri::command]
 pub async fn remove_conversation_listener(
@@ -318,136 +499,3 @@ pub async fn remove_conversation_listener(
     Ok(())
 }
 
-/// 将 Codex 事件转换为前端期望的格式
-fn convert_event_to_frontend_format(event: &codex_core::protocol::Event) -> Map<String, Value> {
-    let mut frontend_event = Map::new();
-    
-    match &event.msg {
-        EventMsg::UserMessage(user_msg) => {
-            frontend_event.insert("type".to_string(), Value::String("user_message".to_string()));
-            frontend_event.insert("content".to_string(), Value::String(user_msg.message.clone()));
-        }
-        EventMsg::AgentMessage(agent_msg) => {
-            frontend_event.insert("type".to_string(), Value::String("agent_message".to_string()));
-            frontend_event.insert("content".to_string(), Value::String(agent_msg.message.clone()));
-        }
-        EventMsg::AgentMessageDelta(delta) => {
-            frontend_event.insert("type".to_string(), Value::String("agent_message_delta".to_string()));
-            frontend_event.insert("delta".to_string(), Value::String(delta.delta.clone()));
-        }
-        EventMsg::McpToolCallBegin(tool_call_begin) => {
-            frontend_event.insert("type".to_string(), Value::String("mcp_tool_call_begin".to_string()));
-            frontend_event.insert("call_id".to_string(), Value::String(tool_call_begin.call_id.clone()));
-            
-            let mut invocation = Map::new();
-            invocation.insert("server".to_string(), Value::String(tool_call_begin.invocation.server.clone()));
-            invocation.insert("tool".to_string(), Value::String(tool_call_begin.invocation.tool.clone()));
-            if let Some(args) = &tool_call_begin.invocation.arguments {
-                invocation.insert("arguments".to_string(), args.clone());
-            } else {
-                invocation.insert("arguments".to_string(), Value::Null);
-            }
-            frontend_event.insert("invocation".to_string(), Value::Object(invocation));
-        }
-        EventMsg::McpToolCallEnd(tool_call_end) => {
-            frontend_event.insert("type".to_string(), Value::String("mcp_tool_call_end".to_string()));
-            frontend_event.insert("call_id".to_string(), Value::String(tool_call_end.call_id.clone()));
-            
-            let mut invocation = Map::new();
-            invocation.insert("server".to_string(), Value::String(tool_call_end.invocation.server.clone()));
-            invocation.insert("tool".to_string(), Value::String(tool_call_end.invocation.tool.clone()));
-            if let Some(args) = &tool_call_end.invocation.arguments {
-                invocation.insert("arguments".to_string(), args.clone());
-            } else {
-                invocation.insert("arguments".to_string(), Value::Null);
-            }
-            frontend_event.insert("invocation".to_string(), Value::Object(invocation));
-            
-            // 转换 Duration 为字符串格式，符合前端协议
-            frontend_event.insert("duration".to_string(), Value::String(format!("{}ms", tool_call_end.duration.as_millis())));
-            
-            // 处理 Result 类型，转换为前端期望的格式
-            match &tool_call_end.result {
-                Ok(result) => {
-                    frontend_event.insert("success".to_string(), Value::Bool(true));
-                    if let Ok(result_json) = serde_json::to_value(result) {
-                        frontend_event.insert("result".to_string(), result_json);
-                    } else {
-                        frontend_event.insert("result".to_string(), Value::Null);
-                    }
-                }
-                Err(err) => {
-                    frontend_event.insert("success".to_string(), Value::Bool(false));
-                    frontend_event.insert("result".to_string(), Value::String(err.clone()));
-                }
-            }
-        }
-        EventMsg::WebSearchBegin(web_search_begin) => {
-            frontend_event.insert("type".to_string(), Value::String("web_search_begin".to_string()));
-            frontend_event.insert("call_id".to_string(), Value::String(web_search_begin.call_id.clone()));
-            // 注意：WebSearchBegin 按协议规范不包含 query 字段
-        }
-        EventMsg::WebSearchEnd(web_search_end) => {
-            frontend_event.insert("type".to_string(), Value::String("web_search_end".to_string()));
-            frontend_event.insert("call_id".to_string(), Value::String(web_search_end.call_id.clone()));
-            frontend_event.insert("query".to_string(), Value::String(web_search_end.query.clone()));
-        }
-        EventMsg::TaskComplete(task_complete) => {
-            frontend_event.insert("type".to_string(), Value::String("task_complete".to_string()));
-            if let Some(last_message) = &task_complete.last_agent_message {
-                frontend_event.insert("last_agent_message".to_string(), Value::String(last_message.clone()));
-            } else {
-                frontend_event.insert("last_agent_message".to_string(), Value::Null);
-            }
-        }
-        EventMsg::Error(error_event) => {
-            frontend_event.insert("type".to_string(), Value::String("error".to_string()));
-            frontend_event.insert("message".to_string(), Value::String(error_event.message.clone()));
-        }
-        EventMsg::TaskStarted(_) => {
-            frontend_event.insert("type".to_string(), Value::String("task_started".to_string()));
-        }
-        EventMsg::TurnAborted(turn_aborted) => {
-            frontend_event.insert("type".to_string(), Value::String("turn_aborted".to_string()));
-            if let Ok(reason_json) = serde_json::to_value(&turn_aborted.reason) {
-                frontend_event.insert("reason".to_string(), reason_json);
-            }
-        }
-        EventMsg::ShutdownComplete => {
-            frontend_event.insert("type".to_string(), Value::String("shutdown_complete".to_string()));
-        }
-        // 对于其他事件类型，尝试直接序列化 msg 部分
-        _ => {
-            if let Ok(msg_json) = serde_json::to_value(&event.msg) {
-                if let Value::Object(mut msg_map) = msg_json {
-                    // 如果 msg 已经有 type 字段，直接使用
-                    // 否则尝试从枚举名推断
-                    if !msg_map.contains_key("type") {
-                        let type_name = match &event.msg {
-                            EventMsg::SessionConfigured(_) => "session_configured",
-                            EventMsg::StreamError(_) => "stream_error",
-                            EventMsg::BackgroundEvent(_) => "background_event", 
-                            EventMsg::TokenCount(_) => "token_count",
-                            EventMsg::ExecCommandBegin(_) => "exec_command_begin",
-                            EventMsg::ExecCommandEnd(_) => "exec_command_end",
-                            EventMsg::ExecCommandOutputDelta(_) => "exec_command_output_delta",
-                            EventMsg::PatchApplyBegin(_) => "patch_apply_begin",
-                            EventMsg::PatchApplyEnd(_) => "patch_apply_end",
-                            EventMsg::AgentReasoning(_) => "agent_reasoning",
-                            EventMsg::AgentReasoningDelta(_) => "agent_reasoning_delta",
-                            _ => "unknown"
-                        };
-                        msg_map.insert("type".to_string(), Value::String(type_name.to_string()));
-                    }
-                    return msg_map;
-                }
-            }
-            
-            // fallback: 创建最基本的事件格式
-            frontend_event.insert("type".to_string(), Value::String("unknown".to_string()));
-            frontend_event.insert("raw_event".to_string(), Value::String(format!("{:?}", event.msg)));
-        }
-    }
-    
-    frontend_event
-}

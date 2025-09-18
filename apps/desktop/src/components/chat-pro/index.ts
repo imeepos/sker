@@ -4,6 +4,13 @@ export { ChatProHeader } from './ChatProHeader'
 export { ChatProInput } from './ChatProInput'
 export { EventsList } from './EventsList'
 
+// 三栏布局聊天界面
+export { ThreeColumnLayout } from './ThreeColumnLayout'
+export { LeftSidebar } from './LeftSidebar'
+export { ConversationList } from './ConversationList'
+export { ChatContent } from './ChatContent'
+export { ThreeColumnLayoutExample } from './ThreeColumnLayoutExample'
+
 // 类型定义
 export interface ChatProEvent {
   id: string

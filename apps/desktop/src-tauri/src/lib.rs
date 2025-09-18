@@ -1,6 +1,5 @@
 // 简化架构 - 直接使用ConversationManager，借鉴CLI实现
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tauri::Manager;
 
 use codex_core::{ConversationManager, AuthManager};
@@ -47,6 +46,10 @@ pub fn run() {
             commands::interrupt_conversation,
             commands::add_conversation_listener,
             commands::remove_conversation_listener,
+            // 审批命令
+            commands::approve_exec_command,
+            commands::approve_patch_command,
+            commands::diagnose_system,
             // 设置管理命令
             settings::get_app_settings,
             settings::save_app_settings,

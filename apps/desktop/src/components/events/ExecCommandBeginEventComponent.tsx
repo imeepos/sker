@@ -22,7 +22,7 @@ export function ExecCommandBeginEventComponent({ event, className, timestamp }: 
 
   const handleCopy = async () => {
     try {
-      const commandInfo = `命令执行开始\n命令: ${execData.command}\n工作目录: ${execData.working_directory || '未指定'}`
+      const commandInfo = `命令执行开始\n命令: ${execData.command}\n工作目录: ${execData.cwd || '未指定'}`
       await navigator.clipboard.writeText(commandInfo)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -88,11 +88,11 @@ export function ExecCommandBeginEventComponent({ event, className, timestamp }: 
                 </div>
               </div>
               
-              {execData.working_directory && (
+              {execData.cwd && (
                 <div>
                   <div className="text-xs font-medium text-cyan-700 mb-1">工作目录:</div>
                   <div className="p-2 bg-cyan-100 border border-cyan-200 rounded text-sm font-mono text-cyan-800">
-                    {execData.working_directory}
+                    {execData.cwd}
                   </div>
                 </div>
               )}

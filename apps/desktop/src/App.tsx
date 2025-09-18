@@ -1,19 +1,63 @@
-import { useEffect, useState } from 'react'
-import { ConversationSidebar } from './components/chat/ConversationSidebar'
-import { ChatWindow } from './components/chat/ChatWindow'
+import { useEffect, useState, useMemo } from 'react'
 import { Button } from './components/ui/Button'
 import { SettingsDialog } from './components/settings'
-import { ChatProExample } from './components/chat-pro/ChatProExample'
+import { ThreeColumnLayout } from './components/chat-pro/ThreeColumnLayout'
 import { useChatStore } from './stores/chat'
 import { useSettingsStore } from './stores/settings'
-import { Bot, Settings, FlaskConical, ArrowLeft } from 'lucide-react'
+import { Bot, Settings, Layout, ArrowLeft } from 'lucide-react'
+import type { Conversation as ChatProConversation } from './components/chat-pro/ThreeColumnLayout'
+import type { ChatProEvent } from './components/chat-pro/index'
 // 导入全局清理工具 - 确保在应用启动时清理旧的监听器
 import './utils/globalCleanup'
 
+type ViewMode = 'default' | 'three-column'
+
 function App() {
-  const { loadConversations } = useChatStore()
+  const {
+    conversations,
+    activeConversationId,
+    createConversation,
+    deleteConversation,
+    setActiveConversation,
+    sendMessage,
+    isLoading,
+    loadConversations,
+    getConversationEvents,
+    conversationEvents
+  } = useChatStore()
   const { openSettings, loadSettings } = useSettingsStore()
-  const [showChatProExample, setShowChatProExample] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('default')
+  
+  // 将chat store的对话数据转换为chat-pro组件需要的格式
+  const chatProConversations: ChatProConversation[] = useMemo(() => {
+    return conversations.map(conv => ({
+      id: conv.id,
+      title: conv.title,
+      lastMessage: conv.messages.length > 0 
+        ? conv.messages[conv.messages.length - 1].content.slice(0, 50) 
+        : undefined,
+      timestamp: new Date(conv.updatedAt),
+      unreadCount: 0, // 暂时设为0，可以后续实现
+      isGroup: false,
+      isStarred: false,
+      status: 'online' as const
+    }))
+  }, [conversations])
+  
+  // 获取完整的对话事件，包括消息、工具调用、错误等所有事件
+  const currentEvents: ChatProEvent[] = useMemo(() => {
+    if (!activeConversationId) return []
+    
+    // 直接从事件存储中获取完整事件
+    const events = getConversationEvents(activeConversationId)
+    
+    return events.map(evt => ({
+      id: evt.id,
+      event: evt.event,
+      timestamp: new Date(evt.timestamp),
+      status: evt.status || 'completed'
+    }))
+  }, [activeConversationId, conversationEvents, getConversationEvents])
 
   useEffect(() => {
     // 初始化时加载对话历史和设置
@@ -37,33 +81,38 @@ function App() {
           <div className="flex items-center gap-2">
             <Bot className="w-6 h-6 text-primary" />
             <h1 className="font-semibold text-lg">
-              {showChatProExample ? 'ChatPro 组件示例' : 'Sker Code Assistant'}
+              {viewMode === 'three-column' ? '三栏布局聊天界面' : 'Sker Code Assistant'}
             </h1>
           </div>
           
           <div className="flex items-center gap-2">
-            {/* ChatPro 示例切换按钮 */}
-            <Button 
-              variant={showChatProExample ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowChatProExample(!showChatProExample)}
-              className="gap-2"
-            >
-              {showChatProExample ? (
-                <>
-                  <ArrowLeft className="w-4 h-4" />
-                  返回主界面
-                </>
-              ) : (
-                <>
-                  <FlaskConical className="w-4 h-4" />
-                  ChatPro 示例
-                </>
-              )}
-            </Button>
+            {/* 界面模式切换按钮 */}
+            {viewMode !== 'default' && (
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => setViewMode('default')}
+                className="gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回默认界面
+              </Button>
+            )}
+            
+            {viewMode === 'default' && (
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => setViewMode('three-column')}
+                className="gap-2"
+              >
+                <Layout className="w-4 h-4" />
+                三栏布局
+              </Button>
+            )}
             
             {/* 开发模式下显示清理按钮 */}
-            {import.meta.env.DEV && !showChatProExample && (
+            {import.meta.env.DEV && (
               <Button 
                 variant="outline" 
                 size="sm"
@@ -74,50 +123,42 @@ function App() {
               </Button>
             )}
             
-            {!showChatProExample && (
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={() => openSettings()}
-                title="打开设置"
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
-            )}
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => openSettings()}
+              title="打开设置"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>
 
       {/* 主要内容区域 */}
       <div className="flex-1 flex overflow-hidden">
-        {showChatProExample ? (
-          /* ChatPro 示例界面 */
-          <div className="flex-1">
-            <ChatProExample />
-          </div>
-        ) : (
-          /* 原始聊天界面 */
-          <>
-            {/* 左侧边栏 - 对话历史 */}
-            <div className="w-80 border-r bg-card">
-              <ConversationSidebar className="h-full border-0" />
-            </div>
-
-            {/* 主对话区域 */}
-            <div className="flex-1 flex flex-col">
-              <ChatWindow className="h-full border-0" />
-            </div>
-          </>
-        )}
+        <ThreeColumnLayout
+          conversations={chatProConversations}
+          events={currentEvents}
+          isProcessing={isLoading}
+          defaultConversationId={activeConversationId || undefined}
+          onConversationSelect={setActiveConversation}
+          onSendMessage={(message: string, _attachments?: File[]) => {
+            // 暂时忽略文件附件，只发送消息内容
+            sendMessage(message)
+          }}
+          onCreateConversation={createConversation}
+          onDeleteConversation={deleteConversation}
+          onClearChat={() => {
+            // 实现清空当前对话的逻辑
+            console.log('清空对话功能待实现')
+          }}
+          onStopProcessing={() => {
+            // 实现停止处理的逻辑
+            console.log('停止处理功能待实现')
+          }}
+        />
       </div>
-
-      {/* 状态栏（可选） */}
-      <footer className="shrink-0 border-t bg-muted/30 px-4 py-2">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>就绪</span>
-          <span>Powered by Sker AI</span>
-        </div>
-      </footer>
 
       {/* 设置对话框 */}
       <SettingsDialog />

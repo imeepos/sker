@@ -20,8 +20,6 @@ import {
   AgentReasoningRawContentDeltaEventComponent,
   AgentReasoningSectionBreakEventComponent,
   SessionConfiguredEventComponent,
-  ExecApprovalRequestEventComponent,
-  ApplyPatchApprovalRequestEventComponent,
   BackgroundEventEventComponent,
   StreamErrorEventComponent,
   PatchApplyBeginEventComponent,
@@ -36,17 +34,21 @@ import {
   ReviewRequestComponent,
   ExitedReviewModeEventComponent
 } from './EventComponentStubs'
+import { ExecApprovalRequestEventComponent } from './ExecApprovalRequestEventComponent'
+import { ApplyPatchApprovalRequestEventComponent } from './ApplyPatchApprovalRequestEventComponent'
 
 interface EventMsgRendererProps {
   event: EventMsg
   className?: string
   timestamp?: Date
+  conversationId?: string
+  eventId?: string
 }
 
 /**
  * EventMsg 渲染器 - 根据事件类型渲染对应的交互组件
  */
-export function EventMsgRenderer({ event, className, timestamp }: EventMsgRendererProps) {
+export function EventMsgRenderer({ event, className, timestamp, conversationId, eventId }: EventMsgRendererProps) {
   switch (event.type) {
     case 'error':
       return <ErrorEventComponent event={event} className={className} timestamp={timestamp} />
@@ -109,10 +111,26 @@ export function EventMsgRenderer({ event, className, timestamp }: EventMsgRender
       return <ExecCommandEndEventComponent event={event} className={className} timestamp={timestamp} />
     
     case 'exec_approval_request':
-      return <ExecApprovalRequestEventComponent event={event} className={className} timestamp={timestamp} />
+      return (
+        <ExecApprovalRequestEventComponent 
+          event={event} 
+          className={className} 
+          timestamp={timestamp}
+          conversationId={conversationId || ''}
+          eventId={eventId || ''}
+        />
+      )
     
     case 'apply_patch_approval_request':
-      return <ApplyPatchApprovalRequestEventComponent event={event} className={className} timestamp={timestamp} />
+      return (
+        <ApplyPatchApprovalRequestEventComponent 
+          event={event} 
+          className={className} 
+          timestamp={timestamp}
+          conversationId={conversationId || ''}
+          eventId={eventId || ''}
+        />
+      )
     
     case 'background_event':
       return <BackgroundEventEventComponent event={event} className={className} timestamp={timestamp} />

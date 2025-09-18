@@ -1,10 +1,8 @@
 import type { 
   ContentBlock, 
-  ImageContent, 
-  TextContent, 
   Role,
   McpInvocation,
-  EventMsg
+  EventMsg,
 } from './protocol'
 
 // 图片附件类型 - 基于标准协议的 ImageContent
@@ -88,4 +86,13 @@ export interface InputState {
   value: string
   isComposing: boolean
   isSubmitting: boolean
+}
+
+// 对话事件类型 - 扩展原始事件，包含完整信息
+export interface ConversationEvent {
+  id: string
+  conversationId: string
+  event: EventMsg
+  timestamp: number
+  status?: 'pending' | 'processing' | 'completed' | 'error'
 }

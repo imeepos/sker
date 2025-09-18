@@ -41,61 +41,84 @@ export function EventMsgExample() {
     {
       id: '4',
       type: 'exec_command_begin',
-      command: 'npm install',
-      working_directory: '/workspace',
+      call_id: 'exec-123',
+      command: ['npm', 'install'],
+      cwd: '/workspace',
+      parsed_cmd: [],
       timestamp: new Date()
     },
     {
       id: '5',
       type: 'exec_command_output_delta',
-      delta: 'Installing dependencies...\n',
+      call_id: 'exec-123',
+      chunk: 'Installing dependencies...\n',
       stream: 'stdout',
       timestamp: new Date()
     },
     {
       id: '6',
       type: 'exec_command_end',
+      call_id: 'exec-123',
+      stdout: 'Installing dependencies...\n',
+      stderr: '',
+      aggregated_output: 'Installing dependencies...\n',
       exit_code: 0,
+      duration: '5.2s',
+      formatted_output: 'Installing dependencies...\n',
       timestamp: new Date()
     },
     {
       id: '7',
       type: 'mcp_tool_call_end',
       call_id: 'tool-123',
-      result: { content: 'File content here...', size: 1024 },
-      duration_ms: 150,
+      invocation: {
+        server: 'filesystem',
+        tool: 'read_file',
+        arguments: { path: '/path/to/file.txt' }
+      },
+      result: { Ok: { content: [{ type: 'text', text: 'File content here...' }] } },
+      duration: '150ms',
       timestamp: new Date()
     },
     {
       id: '8',
       type: 'token_count',
-      input_tokens: BigInt(256),
-      output_tokens: BigInt(512),
+      info: {
+        total_token_usage: {
+          input_tokens: BigInt(256),
+          cached_input_tokens: BigInt(0),
+          output_tokens: BigInt(512),
+          reasoning_output_tokens: BigInt(0),
+          total_tokens: BigInt(768)
+        },
+        last_token_usage: {
+          input_tokens: BigInt(256),
+          cached_input_tokens: BigInt(0),
+          output_tokens: BigInt(512),
+          reasoning_output_tokens: BigInt(0),
+          total_tokens: BigInt(768)
+        },
+        model_context_window: BigInt(8192)
+      },
       timestamp: new Date()
     },
     {
       id: '9',
       type: 'task_complete',
+      last_agent_message: '任务已完成',
       timestamp: new Date()
     },
     {
       id: '10',
       type: 'error',
-      error_message: '网络连接超时',
+      message: '网络连接超时',
       timestamp: new Date()
     }
   ]
 
-  const addEvent = (event: EventMsg & { id: string; timestamp: Date }) => {
-    setEvents(prev => [...prev, { ...event, timestamp: new Date() }])
-  }
 
   const addAllSampleEvents = () => {
-    const eventsWithNewTimestamps = sampleEvents.map(event => ({
-      ...event,
-      timestamp: new Date()
-    }))
-    setEvents(eventsWithNewTimestamps)
+    setEvents([...sampleEvents])
   }
 
   const clearEvents = () => {

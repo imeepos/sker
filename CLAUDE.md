@@ -42,3 +42,14 @@ In the crates folder where the markdown file lives:
 - **务必遵守**解决错误时，先分析错误的根本原因然后逐步修复，千万不要简化实现，先分析查询借鉴相关最佳实践
 - **务必遵守**类型应该统一,禁止出现因参数类型不一致，而采取的类型转换和字段映射，移除类型不一致的实现，重写相关逻辑
 - **务必遵守**唯一ID统一用uuid生成
+
+
+- 导入 invoke
+正确
+```rs
+import { invoke } from '@tauri-apps/api/core'
+```
+错误
+```rs
+import { invoke } from '@tauri-apps/api/tauri'
+```

@@ -1,5 +1,4 @@
 import { EventMsg } from '../../types/protocol/EventMsg'
-import { TaskCompleteEvent } from '../../types/protocol/TaskCompleteEvent'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { CheckCircle2, Clock } from 'lucide-react'
@@ -11,8 +10,7 @@ interface TaskCompleteEventComponentProps {
   timestamp?: Date
 }
 
-export function TaskCompleteEventComponent({ event, className, timestamp }: TaskCompleteEventComponentProps) {
-  const _taskData = event as TaskCompleteEvent
+export function TaskCompleteEventComponent({ className, timestamp }: TaskCompleteEventComponentProps) {
 
   return (
     <Card className={cn("border-l-4 border-l-green-500 bg-green-50", className)}>

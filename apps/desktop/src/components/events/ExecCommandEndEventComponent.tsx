@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/Button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible'
-import { Terminal, ChevronDown, ChevronRight, Copy, CheckCircle2, Clock, AlertTriangle, XCircle } from 'lucide-react'
+import { Terminal, ChevronDown, ChevronRight, Copy, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { cn, formatTime } from '../../lib/utils'
 import { useState } from 'react'
 
@@ -26,7 +26,7 @@ export function ExecCommandEndEventComponent({ event, className, timestamp }: Ex
 
   const handleCopy = async () => {
     try {
-      const execInfo = `命令执行结束\n退出代码: ${execData.exit_code}\n信号: ${execData.signal || '无'}`
+      const execInfo = `命令执行结束\n退出代码: ${execData.exit_code}`
       await navigator.clipboard.writeText(execInfo)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
