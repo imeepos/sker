@@ -180,9 +180,9 @@ export function ConversationList({
 
       {/* 对话列表 */}
       <ScrollArea className="flex-1">
-        <div className="p-1">
+        <div className="p-1 h-full">
           {filteredConversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="h-full flex flex-col items-center justify-center text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground/50 mb-4" />
               <h3 className="font-medium text-muted-foreground mb-2">
                 {searchQuery ? '未找到匹配的对话' : '还没有对话'}

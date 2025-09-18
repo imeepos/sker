@@ -230,6 +230,17 @@ export const useChatStore = create<ChatState>()(
       
       set({ isLoading: true })
       
+      // 🔥 新功能：立即添加"正在回复..."的临时助手消息，等待流式输出替换
+      const tempAssistantMessage: Message = {
+        id: `temp-assistant-${Date.now()}`,
+        conversationId: activeConversationId,
+        role: 'assistant',
+        content: '智能助手正在回复...',
+        timestamp: Date.now(),
+        isStreaming: false
+      }
+      get().addMessage(tempAssistantMessage)
+      
       try {
         await invoke('send_message', {
           request: {
@@ -239,6 +250,18 @@ export const useChatStore = create<ChatState>()(
         })
       } catch (error) {
         console.error('发送消息失败:', error)
+        
+        // 移除临时的"正在回复..."消息
+        set(state => ({
+          conversations: state.conversations.map(conv => 
+            conv.id === activeConversationId
+              ? {
+                  ...conv,
+                  messages: conv.messages.filter(msg => msg.id !== tempAssistantMessage.id)
+                }
+              : conv
+          )
+        }))
         
         // 使用统一的错误消息创建函数
         const errorEvent: ErrorEvent = { message: String(error) }
@@ -398,7 +421,23 @@ export const useChatStore = create<ChatState>()(
     
     // 新的流式事件处理 - 基于流控制器
     handleStreamEvent: (conversationId, eventId, event) => {
-      const { addConversationEventWithId, updateConversationEvent, conversationEvents } = get()
+      const { updateConversationEvent, conversationEvents } = get()
+      
+      // 🔥 新功能：当有新事件到来时，自动完成前一个处理中的事件
+      const existingEvents = conversationEvents[conversationId] || []
+      const processingEvents = existingEvents.filter(evt => evt.status === 'processing')
+      
+      // 如果当前不是增量事件，则完成之前所有处理中的事件
+      const isDeltaEvent = event.type === 'agent_message_delta' || event.type === 'agent_reasoning_delta'
+      if (!isDeltaEvent && processingEvents.length > 0) {
+        console.log('[EventCompletion] 检测到新事件，自动完成前一个处理中的事件:', processingEvents.length)
+        processingEvents.forEach(evt => {
+          console.log('[EventCompletion] 完成事件:', evt.id, evt.event.type)
+          updateConversationEvent(conversationId, evt.id, {
+            status: 'completed'
+          })
+        })
+      }
       
       // 对于审批事件和生命周期事件，必须保留原始ID
       const isApprovalEvent = event.type === 'exec_approval_request' || event.type === 'apply_patch_approval_request'
@@ -424,12 +463,67 @@ export const useChatStore = create<ChatState>()(
         case 'agent_message_delta': {
           const deltaEvent = event as any
           streamController.pushDelta(conversationId, safeEventId, deltaEvent.delta)
+          
+          // 🔥 新功能：如果检测到流式内容，移除"正在回复..."的静态消息
+          const { conversations } = get()
+          const conversation = conversations.find(c => c.id === conversationId)
+          if (conversation) {
+            // 查找最后一个助手消息，如果是"正在回复..."或类似的状态消息，则替换为流式内容
+            const lastAssistantMessage = [...conversation.messages]
+              .reverse()
+              .find(m => m.role === 'assistant')
+            
+            if (lastAssistantMessage && 
+                (lastAssistantMessage.content.includes('正在回复') || 
+                 lastAssistantMessage.content.includes('智能助手') ||
+                 lastAssistantMessage.content.trim() === '' ||
+                 lastAssistantMessage.content.length < 10)) {
+              console.log('[StreamReplacement] 替换静态回复状态为流式内容:', lastAssistantMessage.id)
+              
+              // 删除旧的临时消息，添加新的流式消息
+              const newStreamingMessage: Message = {
+                id: safeEventId,
+                conversationId,
+                role: 'assistant',
+                content: deltaEvent.delta,
+                timestamp: Date.now(),
+                isStreaming: true
+              }
+              
+              // 用新消息替换旧消息
+              set(state => ({
+                conversations: state.conversations.map(conv => 
+                  conv.id === conversationId
+                    ? {
+                        ...conv,
+                        messages: conv.messages.map(msg => 
+                          msg.id === lastAssistantMessage.id ? newStreamingMessage : msg
+                        )
+                      }
+                    : conv
+                )
+              }))
+            }
+          }
           break
         }
         
         case 'task_complete': {
           // 完成所有流
           streamController.finalizeAllStreams(conversationId)
+          
+          // 🔥 优化：确保所有处理中的事件都被标记为完成
+          const { updateConversationEvent } = get()
+          const events = conversationEvents[conversationId] || []
+          const stillProcessingEvents = events.filter(evt => evt.status === 'processing')
+          
+          console.log('[TaskComplete] 完成剩余处理中的事件:', stillProcessingEvents.length)
+          stillProcessingEvents.forEach(evt => {
+            console.log('[TaskComplete] 完成事件:', evt.id, evt.event.type)
+            updateConversationEvent(conversationId, evt.id, {
+              status: 'completed'
+            })
+          })
           break
         }
         
@@ -472,8 +566,42 @@ export const useChatStore = create<ChatState>()(
         }
       }
       
-      // 添加事件到存储
-      addConversationEventWithId(conversationId, safeEventId, event)
+      // 🔥 优化：根据事件类型设置合适的初始状态
+      let initialStatus: 'pending' | 'processing' | 'completed' | 'error' = 'completed'
+      
+      // 处理中状态的事件类型
+      if (event.type.includes('begin') || 
+          event.type === 'agent_message_delta' || 
+          event.type === 'agent_reasoning_delta' ||
+          event.type === 'task_started') {
+        initialStatus = 'processing'
+      }
+      // 错误状态
+      else if (event.type === 'error' || event.type === 'stream_error') {
+        initialStatus = 'error'
+      }
+      // 审批请求状态
+      else if (event.type === 'exec_approval_request' || event.type === 'apply_patch_approval_request') {
+        initialStatus = 'pending'
+      }
+      
+      // 添加事件到存储（带状态）
+      const conversationEvent: ConversationEvent = {
+        id: safeEventId,
+        conversationId,
+        event,
+        timestamp: Date.now(),
+        status: initialStatus
+      }
+      
+      set(state => ({
+        conversationEvents: {
+          ...state.conversationEvents,
+          [conversationId]: [...(state.conversationEvents[conversationId] || []), conversationEvent]
+        }
+      }))
+      
+      console.log('[EventStatus] 添加事件:', safeEventId, event.type, '状态:', initialStatus)
       
       // 处理其他消息逻辑（非流式部分）
       get().processEventMessage(conversationId, event)
