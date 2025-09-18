@@ -350,7 +350,7 @@ export class StreamMessageController {
   finalizeAllStreams(conversationId: string): void {
     let hasUpdates = false
     
-    for (const [streamKey, stream] of this.activeStreams) {
+    for (const [streamKey, _stream] of this.activeStreams) {
       if (streamKey.startsWith(`${conversationId}:`)) {
         const messageId = streamKey.split(':')[1]
         if (this.finalizeStream(conversationId, messageId)) {

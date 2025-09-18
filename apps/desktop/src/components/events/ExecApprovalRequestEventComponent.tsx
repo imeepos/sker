@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ExecApprovalRequestEvent } from '../../types/protocol/ExecApprovalRequestEvent'
 import { EventMsg } from '../../types/protocol/EventMsg'
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card'
 import { Badge } from '../ui/badge'
@@ -14,12 +13,6 @@ interface ExecApprovalRequestEventComponentProps {
   timestamp?: Date
   conversationId: string
   eventId: string
-}
-
-// 临时Event类型定义
-interface ProtocolEvent {
-  id: string
-  msg: EventMsg
 }
 
 /**

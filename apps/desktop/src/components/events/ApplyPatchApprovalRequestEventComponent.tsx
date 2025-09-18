@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ApplyPatchApprovalRequestEvent } from '../../types/protocol/ApplyPatchApprovalRequestEvent'
 import { EventMsg } from '../../types/protocol/EventMsg'
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card'
 import { Badge } from '../ui/badge'

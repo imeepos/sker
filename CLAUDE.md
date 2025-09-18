@@ -53,3 +53,15 @@ import { invoke } from '@tauri-apps/api/core'
 ```rs
 import { invoke } from '@tauri-apps/api/tauri'
 ```
+
+- 检查rust类型错误
+
+```
+cargo check --lib
+```
+
+- 检查typescript类型错误
+
+```
+pnpm run --filter=@sker/desktop build
+```

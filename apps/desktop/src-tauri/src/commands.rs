@@ -222,7 +222,7 @@ pub async fn send_message(
                         if let Err(e) = app_handle.emit(&format!("conversation_events_{}", conv_id), &event) {
                             eprintln!("发送事件失败: {e}");
                         } else {
-                            println!("成功发送事件");
+                            println!("成功发送事件: {}", event.id);
                         }
                         
                         // 处理生命周期管理

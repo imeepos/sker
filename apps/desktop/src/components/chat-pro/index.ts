@@ -9,7 +9,6 @@ export { ThreeColumnLayout } from './ThreeColumnLayout'
 export { LeftSidebar } from './LeftSidebar'
 export { ConversationList } from './ConversationList'
 export { ChatContent } from './ChatContent'
-export { ThreeColumnLayoutExample } from './ThreeColumnLayoutExample'
 
 // 类型定义
 export interface ChatProEvent {
