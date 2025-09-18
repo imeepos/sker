@@ -157,7 +157,7 @@ export const EventsList = memo(function EventsList({
                         status === 'error' ? '失败' : '完成';
       
       badges.push(
-        <Badge key="status" variant={statusVariant} className="ml-2 text-xs">
+        <Badge key="status" variant={statusVariant} className="ml-1 text-xs px-1.5 py-0.5">
           {statusText}
         </Badge>
       );
@@ -166,7 +166,7 @@ export const EventsList = memo(function EventsList({
       if (duration && duration > 0) {
         const durationText = duration < 1000 ? `${duration}ms` : `${(duration/1000).toFixed(1)}s`;
         badges.push(
-          <Badge key="duration" variant="outline" className="ml-2 text-xs">
+          <Badge key="duration" variant="outline" className="ml-1 text-xs px-1.5 py-0.5">
             {durationText}
           </Badge>
         );
@@ -175,8 +175,8 @@ export const EventsList = memo(function EventsList({
       // 输出内容长度
       if (outputContent && outputContent.length > 0) {
         badges.push(
-          <Badge key="output" variant="outline" className="ml-2 text-xs">
-            {outputContent.length} 字符输出
+          <Badge key="output" variant="outline" className="ml-1 text-xs px-1.5 py-0.5">
+            {outputContent.length} 字符
           </Badge>
         );
       }
@@ -210,18 +210,15 @@ export const EventsList = memo(function EventsList({
   }
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("space-y-6", className)}>
       {useLayeredView ? (
         // 分层显示模式
         eventLayers!.map((layer, layerIndex) => {
           const layerId = layer.milestone.id;
           
-          // 为审批事件确保key的唯一性
-          const isApprovalEvent = layer.milestone.event.type === 'exec_approval_request' || 
-                                 layer.milestone.event.type === 'apply_patch_approval_request';
-          const stableKey = isApprovalEvent 
-            ? `${layer.milestone.event.type}-${layerId}-${layer.milestone.timestamp}` 
-            : layerId;
+          // 使用 layerIndex 确保 key 的唯一性
+          const stableKey = `layer-${layerIndex}-${layerId}-${layer.milestone.timestamp}`;
+          
           
           const isLayerExpanded = expandedLayers.has(layerId);
           const isSelected = selectedEventId === layerId;
@@ -230,7 +227,7 @@ export const EventsList = memo(function EventsList({
           const isLastLayer = layerIndex === eventLayers!.length - 1;
 
           return (
-            <div key={stableKey} className="space-y-2">
+            <div key={stableKey} className="space-y-3">
               {/* 里程碑事件 */}
               <div
                 className={cn("relative group", {
@@ -246,7 +243,7 @@ export const EventsList = memo(function EventsList({
                 </div>
 
                 {/* 事件内容 */}
-                <div className={cn("ml-12 transition-all", statusColorClass)}>
+                <div className={cn("ml-8 transition-all", statusColorClass)}>
                   <EventMsgRenderer
                     event={layer.milestone.event}
                     timestamp={new Date(layer.milestone.timestamp)}
@@ -261,7 +258,7 @@ export const EventsList = memo(function EventsList({
 
                 {/* 展开/折叠按钮和聚合信息 */}
                 {hasRelatedEvents && (
-                  <div className="absolute left-12 top-2 flex items-center gap-2">
+                  <div className="absolute left-8 top-2 flex items-center gap-2">
                     <button
                       onClick={() => toggleLayerExpanded(layerId)}
                       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -302,7 +299,7 @@ export const EventsList = memo(function EventsList({
 
                     return (
                       <div
-                        key={relatedEvent.id}
+                        key={`related-${layerIndex}-${relatedIndex}-${relatedEvent.id}-${relatedEvent.timestamp}`}
                         className={cn("relative group", {
                           "ring-1 ring-blue-100": isRelatedSelected,
                         })}
@@ -353,7 +350,7 @@ export const EventsList = memo(function EventsList({
 
           return (
             <div
-              key={eventItem.id}
+              key={`event-${eventItem.index}-${eventItem.id}-${eventItem.timestamp}`}
               className={cn("relative group", {
                 "ring-2 ring-blue-200": isSelected,
               })}

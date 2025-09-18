@@ -228,12 +228,10 @@ pub async fn send_message(
                         // 处理生命周期管理
                         match event.msg {
                             EventMsg::TaskComplete(_) => {
-                                // 任务完成，但不立即退出，等待ShutdownComplete
-                                println!("任务完成，等待关闭确认...");
-                                if let Err(e) = conversation.submit(Op::Shutdown).await {
-                                    eprintln!("发送关闭信号失败: {e}");
-                                    break;
-                                }
+                                // 任务完成，继续等待下一个用户输入，不自动关闭对话
+                                println!("任务完成，等待下一个用户输入...");
+                                // 桌面应用中不应该自动发送Shutdown信号
+                                // 继续事件循环，等待下一个用户交互
                             }
                             EventMsg::ShutdownComplete => {
                                 // 真正的结束信号

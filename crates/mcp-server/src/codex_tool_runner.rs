@@ -28,6 +28,7 @@ use mcp_types::ContentBlock;
 use mcp_types::RequestId;
 use mcp_types::TextContent;
 use serde_json::json;
+use uuid::Uuid;
 use tokio::sync::Mutex;
 
 pub(crate) const INVALID_PARAMS_ERROR_CODE: i64 = -32602;
@@ -66,8 +67,8 @@ pub async fn run_codex_tool_session(
     };
 
     let session_configured_event = Event {
-        // Use a fake id value for now.
-        id: "".to_string(),
+        // 使用uuid生成唯一ID
+        id: Uuid::new_v4().to_string(),
         msg: EventMsg::SessionConfigured(session_configured.clone()),
     };
     outgoing

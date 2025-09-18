@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { EventMsg } from '../../types/protocol/EventMsg'
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card'
-import { Badge } from '../ui/badge'
 import { Button } from '../ui/Button'
 import { cn, formatTime } from '../../lib/utils'
-import { AlertTriangle, Terminal, Folder, Clock } from 'lucide-react'
+import { Terminal, Folder, Check, X, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 
 interface ExecApprovalRequestEventComponentProps {
@@ -16,7 +14,7 @@ interface ExecApprovalRequestEventComponentProps {
 }
 
 /**
- * 执行命令审批请求组件 - 提供交互式审批界面
+ * 执行命令审批请求组件 - 优化后的简洁设计
  */
 export function ExecApprovalRequestEventComponent({ 
   event, 
@@ -27,6 +25,7 @@ export function ExecApprovalRequestEventComponent({
 }: ExecApprovalRequestEventComponentProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [isApproved, setIsApproved] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
 
   const approvalEvent = event as any
   const { command, cwd, reason, call_id } = approvalEvent
@@ -37,19 +36,12 @@ export function ExecApprovalRequestEventComponent({
 
     setIsProcessing(true)
     
-    console.log('开始处理审批决策:', {
-      conversationId,
-      eventId,
-      decision,
-      call_id
-    })
-    
     try {
-      // 使用传递的eventId，这现在应该是后端的真实事件ID
       await invoke('approve_exec_command', {
         conversationId,
-        approvalId: eventId,
-        decision
+        eventId,
+        decision,
+        callId: call_id
       })
       
       setIsApproved(true)
@@ -65,7 +57,6 @@ export function ExecApprovalRequestEventComponent({
       console.log(`✅ 审批已提交: 命令执行${decisionMap[decision]}, eventId: ${eventId}`)
     } catch (error) {
       console.error('审批失败:', error)
-      // TODO: 替换为更好的用户通知方式
       alert(`审批失败: ${error}`)
     } finally {
       setIsProcessing(false)
@@ -73,66 +64,78 @@ export function ExecApprovalRequestEventComponent({
   }
 
   return (
-    <Card className={cn("border-l-4 border-l-amber-500 bg-amber-50", className)}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+    <div className={cn(
+      "group relative bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-lg p-4 transition-all duration-200",
+      "hover:shadow-sm hover:border-amber-300",
+      className
+    )}>
+      {/* 左侧指示线 */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-yellow-500 rounded-l-lg" />
+      
+      {/* 主要内容 */}
+      <div className="ml-2">
+        {/* 标题栏 - 简洁设计 */}
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <CardTitle className="text-sm font-medium text-amber-800">执行命令审批请求</CardTitle>
-            {isApproved ? (
-              <Badge variant="outline" className="text-green-600 bg-green-100 border-green-200">
+            <Terminal className="w-4 h-4 text-amber-600" />
+            <span className="font-medium text-amber-900">命令执行请求</span>
+            {isApproved && (
+              <div className="flex items-center gap-1 text-green-700 text-xs bg-green-100 px-2 py-0.5 rounded-full">
+                <Check className="w-3 h-3" />
                 已处理
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-amber-600 bg-amber-100 border-amber-200">
-                等待审批
-              </Badge>
+              </div>
             )}
           </div>
-          {timestamp && <span className="text-xs text-muted-foreground">{formatTime(timestamp)}</span>}
-        </div>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        {/* 命令信息 */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <Terminal className="w-4 h-4 text-gray-600" />
-            <span className="font-medium">要执行的命令:</span>
-          </div>
-          <div className="bg-gray-100 rounded-md p-3 font-mono text-sm">
-            {command.join(' ')}
-          </div>
+          {timestamp && (
+            <span className="text-xs text-amber-600/70 font-mono">
+              {formatTime(timestamp)}
+            </span>
+          )}
         </div>
 
-        {/* 工作目录 */}
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <Folder className="w-4 h-4" />
-          <span className="font-medium">工作目录:</span>
-          <span className="font-mono">{cwd}</span>
+        {/* 命令预览 - 主要信息 */}
+        <div className="bg-white/70 border border-amber-200 rounded-md px-3 py-2 mb-3 font-mono text-sm text-gray-800 break-all">
+          {command.join(' ')}
         </div>
 
-        {/* 原因说明 */}
-        {reason && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-            <div className="flex items-center gap-2 text-sm text-blue-800 mb-1">
-              <Clock className="w-4 h-4" />
-              <span className="font-medium">原因:</span>
+        {/* 详细信息切换 */}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 mb-2 transition-colors"
+        >
+          {showDetails ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {showDetails ? '隐藏详情' : '显示详情'}
+        </button>
+
+        {/* 详细信息 - 可折叠 */}
+        {showDetails && (
+          <div className="space-y-2 mb-3 text-xs text-gray-600 bg-white/50 p-2 rounded border border-amber-100">
+            <div className="flex items-center gap-2">
+              <Folder className="w-3 h-3 text-amber-600" />
+              <span className="font-medium">工作目录:</span>
+              <span className="font-mono">{cwd}</span>
             </div>
-            <p className="text-sm text-blue-700">{reason}</p>
+            
+            {reason && (
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-3 h-3 text-amber-600 mt-0.5" />
+                <span className="font-medium">执行原因:</span>
+                <span className="flex-1">{reason}</span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* 审批按钮 */}
+        {/* 操作按钮 - 优化布局 */}
         {!isApproved && (
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              variant="default"
               disabled={isProcessing}
               onClick={() => handleApproval('approved')}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700 text-white text-xs h-7 px-3"
             >
+              <Check className="w-3 h-3 mr-1" />
               {isProcessing ? '处理中...' : '批准'}
             </Button>
             
@@ -140,38 +143,26 @@ export function ExecApprovalRequestEventComponent({
               size="sm"
               variant="outline"
               disabled={isProcessing}
-              onClick={() => handleApproval('approved_for_session')}
-              className="border-green-600 text-green-600 hover:bg-green-50"
+              onClick={() => handleApproval('denied')}
+              className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-3"
             >
-              批准（会话期间自动批准）
+              <X className="w-3 h-3 mr-1" />
+              拒绝
             </Button>
             
             <Button
               size="sm"
               variant="outline"
               disabled={isProcessing}
-              onClick={() => handleApproval('denied')}
-              className="border-red-600 text-red-600 hover:bg-red-50"
+              onClick={() => handleApproval('approved_for_session')}
+              className="border-amber-300 text-amber-700 hover:bg-amber-50 text-xs h-7 px-3"
             >
-              拒绝
-            </Button>
-            
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={isProcessing}
-              onClick={() => handleApproval('abort')}
-            >
-              中止会话
+              <Check className="w-3 h-3 mr-1" />
+              自动批准
             </Button>
           </div>
         )}
-
-        {/* 调用ID */}
-        <div className="text-xs text-gray-500 pt-2 border-t">
-          调用ID: {call_id}
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

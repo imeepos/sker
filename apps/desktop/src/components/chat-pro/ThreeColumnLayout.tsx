@@ -107,7 +107,7 @@ export function ThreeColumnLayout({
     : null
 
   return (
-    <div className={cn('h-full flex bg-background overflow-hidden', className)}>
+    <div className={cn('h-full flex bg-background overflow-hidden w-full', className)}>
       {/* 左侧功能导航栏 */}
       <div className="w-[70px] h-full border-r bg-slate-50 dark:bg-slate-900 flex-shrink-0 overflow-hidden">
         <LeftSidebar

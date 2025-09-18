@@ -751,7 +751,7 @@ impl CodexMessageProcessor {
                 ..
             }) => {
                 let event = Event {
-                    id: "".to_string(),
+                    id: uuid::Uuid::new_v4().to_string(),
                     msg: EventMsg::SessionConfigured(session_configured.clone()),
                 };
                 self.outgoing.send_event_as_notification(&event, None).await;

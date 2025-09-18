@@ -220,7 +220,7 @@ impl Codex {
         // This task will run until Op::Shutdown is received.
         tokio::spawn(submission_loop(session, turn_context, config, rx_sub));
         let codex = Codex {
-            next_id: AtomicU64::new(0),
+            next_id: AtomicU64::new(1),
             tx_sub,
             rx_event,
         };

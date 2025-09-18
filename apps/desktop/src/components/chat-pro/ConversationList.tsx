@@ -179,7 +179,7 @@ export function ConversationList({
       </div>
 
       {/* 对话列表 */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 w-full">
         <div className="p-1 h-full">
           {filteredConversations.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center">

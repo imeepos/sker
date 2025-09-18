@@ -15,8 +15,7 @@ import {
   Star, 
   Search,
   Circle,
-  Users,
-  Zap
+  Users
 } from 'lucide-react'
 import type { Conversation } from './ThreeColumnLayout'
 import type { ChatProEvent } from './index'
@@ -192,10 +191,10 @@ export function ChatContent({
 
       {/* 主内容区域 */}
       <div className="flex-1 flex min-h-0">
-        {/* 消息列表区域 */}
+        {/* 消息列表区域 - 优化布局 */}
         <div className="flex-1 flex flex-col min-h-0">
           <ScrollArea ref={scrollAreaRef} className="flex-1">
-            <div className="p-4 space-y-3 pb-6">
+            <div className="px-6 py-4 space-y-6 pb-8">
               {events.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                   <div className="w-16 h-16 rounded-full bg-muted mb-4 flex items-center justify-center">
@@ -225,18 +224,19 @@ export function ChatContent({
             </div>
           </ScrollArea>
 
-          {/* 输入区域 */}
-          <Separator />
-          <div className="p-4 flex-shrink-0 bg-background">
-            <ChatProInput
-              onSendMessage={handleSendMessage}
-              disabled={isProcessing}
-              placeholder={
-                isProcessing 
-                  ? '正在处理中...' 
-                  : `发送消息给 ${conversation.title}...`
-              }
-            />
+          {/* 输入区域 - 优化布局 */}
+          <div className="border-t bg-slate-50/50 dark:bg-slate-900/50">
+            <div className="px-6 py-4 flex-shrink-0">
+              <ChatProInput
+                onSendMessage={handleSendMessage}
+                disabled={isProcessing}
+                placeholder={
+                  isProcessing 
+                    ? '正在处理中...' 
+                    : `发送消息给 ${conversation.title}...`
+                }
+              />
+            </div>
           </div>
         </div>
 
@@ -325,27 +325,26 @@ export function ChatContent({
         )}
       </div>
 
-      {/* 处理状态栏 */}
+      {/* 处理状态栏 - 优化样式 */}
       {isProcessing && (
-        <>
-          <Separator />
-          <div className="px-4 py-2 bg-muted/50 flex items-center justify-between text-sm flex-shrink-0">
+        <div className="border-t bg-blue-50/50 dark:bg-blue-950/50">
+          <div className="px-6 py-3 flex items-center justify-between text-sm flex-shrink-0">
             <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-blue-500 animate-pulse" />
-              <span className="text-muted-foreground">正在处理消息...</span>
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              <span className="text-blue-700 dark:text-blue-300 font-medium">正在处理消息...</span>
             </div>
             {onStopProcessing && (
               <Button 
                 variant="ghost" 
                 size="sm" 
                 onClick={onStopProcessing}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 h-8 px-3"
               >
                 停止
               </Button>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   )

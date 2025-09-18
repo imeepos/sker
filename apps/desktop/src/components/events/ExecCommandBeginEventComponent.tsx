@@ -1,10 +1,7 @@
 import { EventMsg } from '../../types/protocol/EventMsg'
 import { ExecCommandBeginEvent } from '../../types/protocol/ExecCommandBeginEvent'
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
-import { Badge } from '../ui/badge'
 import { Button } from '../ui/Button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible'
-import { Terminal, ChevronDown, ChevronRight, Copy, CheckCircle2, Play } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, CheckCircle2, Terminal, Folder } from 'lucide-react'
 import { cn, formatTime } from '../../lib/utils'
 import { useState } from 'react'
 
@@ -32,78 +29,73 @@ export function ExecCommandBeginEventComponent({ event, className, timestamp }: 
   }
 
   return (
-    <Card className={cn("border-l-4 border-l-cyan-500 bg-cyan-50", className)}>
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="p-0 h-auto">
-                  {isExpanded ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                </Button>
-              </CollapsibleTrigger>
-              <Terminal className="w-4 h-4 text-cyan-600" />
-              <CardTitle className="text-sm font-medium text-cyan-800">
-                命令执行开始
-              </CardTitle>
-              <Badge variant="outline" className="text-cyan-600 bg-cyan-100 border-cyan-200">
-                <Play className="w-3 h-3 mr-1" />
-                执行中
-              </Badge>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {timestamp && (
-                <span className="text-xs text-muted-foreground">
-                  {formatTime(timestamp)}
-                </span>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopy}
-                className="h-7 px-2"
-              >
-                {copied ? (
-                  <CheckCircle2 className="w-3 h-3 text-green-600" />
-                ) : (
-                  <Copy className="w-3 h-3" />
-                )}
-              </Button>
+    <div className={cn(
+      "group relative bg-blue-50/50 border border-blue-200 rounded-lg p-3 transition-all duration-200",
+      "hover:bg-blue-50 hover:border-blue-300",
+      className
+    )}>
+      {/* 左侧指示线 */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-400 rounded-l-lg" />
+      
+      {/* 主要内容 */}
+      <div className="ml-2">
+        {/* 标题栏 - 简洁设计 */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-blue-600" />
+            <span className="font-medium text-blue-900 text-sm">开始执行</span>
+            <div className="flex items-center gap-1 text-blue-700 text-xs bg-blue-100 px-2 py-0.5 rounded-full">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              进行中
             </div>
           </div>
-        </CardHeader>
-
-        <CollapsibleContent>
-          <CardContent className="pt-0">
-            <div className="space-y-3">
-              <div>
-                <div className="text-xs font-medium text-cyan-700 mb-1">执行命令:</div>
-                <div className="p-2 bg-gray-900 border border-cyan-200 rounded text-sm font-mono text-green-400">
-                  $ {execData.command}
-                </div>
-              </div>
-              
-              {execData.cwd && (
-                <div>
-                  <div className="text-xs font-medium text-cyan-700 mb-1">工作目录:</div>
-                  <div className="p-2 bg-cyan-100 border border-cyan-200 rounded text-sm font-mono text-cyan-800">
-                    {execData.cwd}
-                  </div>
-                </div>
+          
+          <div className="flex items-center gap-2">
+            {timestamp && (
+              <span className="text-xs text-blue-600/70 font-mono">
+                {formatTime(timestamp)}
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopy}
+              className="h-6 w-6 p-0 text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              {copied ? (
+                <CheckCircle2 className="w-3 h-3 text-green-600" />
+              ) : (
+                <Copy className="w-3 h-3" />
               )}
-              
-              <div className="text-xs text-cyan-600">
-                命令正在执行，请等待输出结果...
-              </div>
+            </Button>
+          </div>
+        </div>
+
+        {/* 命令预览 - 始终显示 */}
+        <div className="bg-slate-900 border border-blue-200 rounded px-3 py-2 mb-2 font-mono text-sm text-green-400">
+          $ {execData.command}
+        </div>
+
+        {/* 详细信息切换 */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 transition-colors"
+        >
+          {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {isExpanded ? '隐藏详情' : '显示详情'}
+        </button>
+
+        {/* 详细信息 - 可折叠 */}
+        {isExpanded && execData.cwd && (
+          <div className="mt-2 text-xs text-gray-600 bg-white/70 p-2 rounded border border-blue-100">
+            <div className="flex items-center gap-2">
+              <Folder className="w-3 h-3 text-blue-600" />
+              <span className="font-medium">工作目录:</span>
+              <span className="font-mono">{execData.cwd}</span>
             </div>
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

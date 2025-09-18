@@ -77,21 +77,6 @@ export function ChatProInput({
     adjustTextareaHeight()
   }, [maxLength, adjustTextareaHeight])
 
-  // 处理键盘事件
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter') {
-      if (e.ctrlKey || e.metaKey) {
-        // Ctrl+Enter 或 Cmd+Enter 发送消息
-        e.preventDefault()
-        handleSendMessage()
-      } else if (!e.shiftKey) {
-        // Enter 键发送消息（除非按住 Shift）
-        e.preventDefault()
-        handleSendMessage()
-      }
-    }
-  }, [])
-
   // 发送消息
   const handleSendMessage = useCallback(() => {
     if (!message.trim() && attachments.length === 0) return
@@ -108,6 +93,21 @@ export function ChatProInput({
       }
     }, 0)
   }, [message, attachments, disabled, isUploading, onSendMessage])
+
+  // 处理键盘事件
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') {
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+Enter 或 Cmd+Enter 发送消息
+        e.preventDefault()
+        handleSendMessage()
+      } else if (!e.shiftKey) {
+        // Enter 键发送消息（除非按住 Shift）
+        e.preventDefault()
+        handleSendMessage()
+      }
+    }
+  }, [handleSendMessage])
 
   // 处理文件选择
   const handleFileSelect = useCallback(async (files: FileList | null) => {
