@@ -6,12 +6,19 @@ use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 /// 项目仓储
-pub struct ProjectRepository;
+pub struct ProjectRepository {
+    db: DatabaseConnection,
+}
 
 impl ProjectRepository {
+    /// 创建新的项目仓储实例
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
     /// 创建新项目
     pub async fn create(
-        db: &DatabaseConnection,
+        &self,
         user_id: Uuid,
         name: String,
         description: Option<String>,
@@ -35,42 +42,42 @@ impl ProjectRepository {
             ..Default::default()
         };
         
-        let _result = project::Entity::insert(project).exec(db).await?;
+        let _result = project::Entity::insert(project).exec(&self.db).await?;
         
         // 获取插入的项目
         project::Entity::find_by_id(project_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("Project", project_id))
     }
     
     /// 根据ID查找项目
-    pub async fn find_by_id(db: &DatabaseConnection, project_id: Uuid) -> Result<Option<project::Model>> {
+    pub async fn find_by_id(&self, project_id: Uuid) -> Result<Option<project::Model>> {
         project::Entity::find_by_id(project_id)
-            .one(db)
+            .one(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据用户ID查找项目
-    pub async fn find_by_user(db: &DatabaseConnection, user_id: Uuid) -> Result<Vec<project::Model>> {
+    pub async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<project::Model>> {
         project::Entity::find()
             .filter(project::Column::UserId.eq(user_id))
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新项目配置
     pub async fn update_config(
-        db: &DatabaseConnection,
+        &self,
         project_id: Uuid,
         technology_stack: Option<JsonValue>,
         coding_standards: Option<JsonValue>,
         git_settings: Option<JsonValue>,
     ) -> Result<project::Model> {
         let project = project::Entity::find_by_id(project_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("Project", project_id))?;
         
@@ -90,20 +97,20 @@ impl ProjectRepository {
         
         project.updated_at = Set(chrono::Utc::now().into());
         
-        project.update(db)
+        project.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新项目上下文信息
     pub async fn update_context(
-        db: &DatabaseConnection,
+        &self,
         project_id: Uuid,
         codebase_info: Option<JsonValue>,
         project_context: Option<JsonValue>,
     ) -> Result<project::Model> {
         let project = project::Entity::find_by_id(project_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("Project", project_id))?;
         
@@ -119,19 +126,19 @@ impl ProjectRepository {
         
         project.updated_at = Set(chrono::Utc::now().into());
         
-        project.update(db)
+        project.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新项目状态
     pub async fn update_status(
-        db: &DatabaseConnection,
+        &self,
         project_id: Uuid,
         status: &str,
     ) -> Result<project::Model> {
         let project = project::Entity::find_by_id(project_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("Project", project_id))?;
         
@@ -139,15 +146,15 @@ impl ProjectRepository {
         project.status = Set(status.to_string());
         project.updated_at = Set(chrono::Utc::now().into());
         
-        project.update(db)
+        project.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 删除项目
-    pub async fn delete(db: &DatabaseConnection, project_id: Uuid) -> Result<()> {
+    pub async fn delete(&self, project_id: Uuid) -> Result<()> {
         project::Entity::delete_by_id(project_id)
-            .exec(db)
+            .exec(&self.db)
             .await?;
         
         Ok(())
@@ -183,9 +190,9 @@ mod tests {
     async fn test_create_project() {
         let db = setup_test_db().await;
         let user_id = create_test_user(&db).await;
+        let project_repo = ProjectRepository::new(db.clone());
         
-        let project = ProjectRepository::create(
-            &db,
+        let project = project_repo.create(
             user_id,
             "测试项目".to_string(),
             Some("这是一个测试项目".to_string()),
@@ -203,10 +210,10 @@ mod tests {
     async fn test_find_by_user() {
         let db = setup_test_db().await;
         let user_id = create_test_user(&db).await;
+        let project_repo = ProjectRepository::new(db.clone());
         
         // 创建两个项目
-        let _project1 = ProjectRepository::create(
-            &db,
+        let _project1 = project_repo.create(
             user_id,
             "项目1".to_string(),
             None,
@@ -214,8 +221,7 @@ mod tests {
             "/path/to/workspace1".to_string(),
         ).await.unwrap();
         
-        let _project2 = ProjectRepository::create(
-            &db,
+        let _project2 = project_repo.create(
             user_id,
             "项目2".to_string(),
             None,
@@ -223,7 +229,7 @@ mod tests {
             "/path/to/workspace2".to_string(),
         ).await.unwrap();
         
-        let projects = ProjectRepository::find_by_user(&db, user_id).await.unwrap();
+        let projects = project_repo.find_by_user(user_id).await.unwrap();
         assert_eq!(projects.len(), 2);
     }
 
@@ -231,9 +237,9 @@ mod tests {
     async fn test_update_config() {
         let db = setup_test_db().await;
         let user_id = create_test_user(&db).await;
+        let project_repo = ProjectRepository::new(db.clone());
         
-        let project = ProjectRepository::create(
-            &db,
+        let project = project_repo.create(
             user_id,
             "测试项目".to_string(),
             None,
@@ -251,8 +257,7 @@ mod tests {
             "indentation": 4
         });
         
-        let updated_project = ProjectRepository::update_config(
-            &db,
+        let updated_project = project_repo.update_config(
             project.project_id,
             Some(tech_stack.clone()),
             Some(coding_standards.clone()),
@@ -267,9 +272,9 @@ mod tests {
     async fn test_update_status() {
         let db = setup_test_db().await;
         let user_id = create_test_user(&db).await;
+        let project_repo = ProjectRepository::new(db.clone());
         
-        let project = ProjectRepository::create(
-            &db,
+        let project = project_repo.create(
             user_id,
             "测试项目".to_string(),
             None,
@@ -279,7 +284,7 @@ mod tests {
         
         assert_eq!(project.status, "active");
         
-        let updated_project = ProjectRepository::update_status(&db, project.project_id, "paused")
+        let updated_project = project_repo.update_status(project.project_id, "paused")
             .await.unwrap();
         
         assert_eq!(updated_project.status, "paused");

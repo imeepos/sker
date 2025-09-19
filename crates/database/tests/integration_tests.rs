@@ -49,8 +49,8 @@ async fn create_test_project(
     db: &codex_database::DatabaseConnection, 
     user_id: Uuid
 ) -> Uuid {
-    let project = ProjectRepository::create(
-        db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "多Agent协同开发系统".to_string(),
         Some("基于SeaORM的数据库层实现".to_string()),
@@ -80,8 +80,7 @@ async fn create_test_project(
         "auto_merge": false
     });
     
-    ProjectRepository::update_config(
-        db,
+    project_repo.update_config(
         project.project_id,
         Some(tech_stack),
         Some(coding_standards),
@@ -185,7 +184,8 @@ async fn test_complete_multi_agent_workflow() {
     println!("✓ 创建{}个Agent: {:?}", agent_ids.len(), agent_ids);
     
     // 4. 验证用户关联数据
-    let user_projects = ProjectRepository::find_by_user(&db, user_id).await.unwrap();
+    let project_repo = ProjectRepository::new(db.clone());
+    let user_projects = project_repo.find_by_user(user_id).await.unwrap();
     assert_eq!(user_projects.len(), 1);
     assert_eq!(user_projects[0].project_id, project_id);
     
@@ -252,7 +252,8 @@ async fn test_complete_multi_agent_workflow() {
     assert_eq!(completed_agent.current_task_id, None);
     
     // 11. 验证项目配置更新
-    let project = ProjectRepository::find_by_id(&db, project_id)
+    let project_repo_final = ProjectRepository::new(db.clone());
+    let project = project_repo_final.find_by_id(project_id)
         .await.unwrap()
         .unwrap();
     

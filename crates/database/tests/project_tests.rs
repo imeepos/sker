@@ -29,8 +29,8 @@ async fn test_create_project() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "测试项目".to_string(),
         Some("这是一个测试项目".to_string()),
@@ -52,8 +52,8 @@ async fn test_find_project_by_id() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let created_project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let created_project = project_repo.create(
         user_id,
         "查找测试项目".to_string(),
         None,
@@ -63,7 +63,7 @@ async fn test_find_project_by_id() {
     .await
     .unwrap();
 
-    let found_project = ProjectRepository::find_by_id(&db, created_project.project_id)
+    let found_project = project_repo.find_by_id(created_project.project_id)
         .await
         .unwrap()
         .expect("应该找到项目");
@@ -77,10 +77,10 @@ async fn test_find_projects_by_user() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
+    let project_repo = ProjectRepository::new(db.clone());
     
     // 创建两个项目
-    let _project1 = ProjectRepository::create(
-        &db,
+    let _project1 = project_repo.create(
         user_id,
         "用户项目1".to_string(),
         None,
@@ -90,8 +90,7 @@ async fn test_find_projects_by_user() {
     .await
     .unwrap();
 
-    let _project2 = ProjectRepository::create(
-        &db,
+    let _project2 = project_repo.create(
         user_id,
         "用户项目2".to_string(),
         None,
@@ -101,7 +100,7 @@ async fn test_find_projects_by_user() {
     .await
     .unwrap();
 
-    let projects = ProjectRepository::find_by_user(&db, user_id)
+    let projects = project_repo.find_by_user(user_id)
         .await
         .unwrap();
 
@@ -115,8 +114,8 @@ async fn test_update_project_config() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "配置测试项目".to_string(),
         None,
@@ -132,8 +131,7 @@ async fn test_update_project_config() {
         "max_line_length": 100
     });
 
-    let updated_project = ProjectRepository::update_config(
-        &db,
+    let updated_project = project_repo.update_config(
         project.project_id,
         Some(tech_stack.clone()),
         Some(coding_standards.clone()),
@@ -151,8 +149,8 @@ async fn test_update_project_status() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "状态测试项目".to_string(),
         None,
@@ -162,7 +160,7 @@ async fn test_update_project_status() {
     .await
     .unwrap();
 
-    let updated_project = ProjectRepository::update_status(&db, project.project_id, "paused")
+    let updated_project = project_repo.update_status(project.project_id, "paused")
         .await
         .unwrap();
 
@@ -174,8 +172,8 @@ async fn test_delete_project() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "删除测试项目".to_string(),
         None,
@@ -185,11 +183,11 @@ async fn test_delete_project() {
     .await
     .unwrap();
 
-    ProjectRepository::delete(&db, project.project_id)
+    project_repo.delete(project.project_id)
         .await
         .unwrap();
 
-    let found_project = ProjectRepository::find_by_id(&db, project.project_id)
+    let found_project = project_repo.find_by_id(project.project_id)
         .await
         .unwrap();
 
@@ -201,8 +199,8 @@ async fn test_create_requirement_document() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "需求文档测试项目".to_string(),
         None,
@@ -212,8 +210,8 @@ async fn test_create_requirement_document() {
     .await
     .unwrap();
 
-    let document = RequirementDocumentRepository::create(
-        &db,
+    let doc_repo = RequirementDocumentRepository::new(db.clone());
+    let document = doc_repo.create(
         project.project_id,
         "用户登录需求".to_string(),
         "用户应该能够通过邮箱和密码登录系统".to_string(),
@@ -233,8 +231,8 @@ async fn test_find_documents_by_project() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "文档查找测试".to_string(),
         None,
@@ -244,9 +242,9 @@ async fn test_find_documents_by_project() {
     .await
     .unwrap();
 
+    let doc_repo = RequirementDocumentRepository::new(db.clone());
     // 创建多个文档
-    let _doc1 = RequirementDocumentRepository::create(
-        &db,
+    let _doc1 = doc_repo.create(
         project.project_id,
         "需求1".to_string(),
         "需求1内容".to_string(),
@@ -255,8 +253,7 @@ async fn test_find_documents_by_project() {
     .await
     .unwrap();
 
-    let _doc2 = RequirementDocumentRepository::create(
-        &db,
+    let _doc2 = doc_repo.create(
         project.project_id,
         "需求2".to_string(),
         "需求2内容".to_string(),
@@ -265,7 +262,7 @@ async fn test_find_documents_by_project() {
     .await
     .unwrap();
 
-    let documents = RequirementDocumentRepository::find_by_project(&db, project.project_id)
+    let documents = doc_repo.find_by_project(project.project_id)
         .await
         .unwrap();
 
@@ -279,8 +276,8 @@ async fn test_update_document_llm_processing() {
     let db = setup_test_db().await;
 
     let user_id = create_test_user(&db).await;
-    let project = ProjectRepository::create(
-        &db,
+    let project_repo = ProjectRepository::new(db.clone());
+    let project = project_repo.create(
         user_id,
         "LLM处理测试".to_string(),
         None,
@@ -290,8 +287,8 @@ async fn test_update_document_llm_processing() {
     .await
     .unwrap();
 
-    let document = RequirementDocumentRepository::create(
-        &db,
+    let doc_repo = RequirementDocumentRepository::new(db.clone());
+    let document = doc_repo.create(
         project.project_id,
         "待处理需求".to_string(),
         "这个需求需要LLM处理".to_string(),
@@ -307,8 +304,7 @@ async fn test_update_document_llm_processing() {
     });
 
     let session_id = Uuid::new_v4();
-    let updated_document = RequirementDocumentRepository::update_llm_processing(
-        &db,
+    let updated_document = doc_repo.update_llm_processing(
         document.document_id,
         structured_content.to_string(),
         session_id,

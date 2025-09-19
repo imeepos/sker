@@ -6,12 +6,19 @@ use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 /// LLM会话仓储
-pub struct LlmSessionRepository;
+pub struct LlmSessionRepository {
+    db: DatabaseConnection,
+}
 
 impl LlmSessionRepository {
+    /// 创建新的LLM会话仓储实例
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
     /// 创建新LLM会话
     pub async fn create(
-        db: &DatabaseConnection,
+        &self,
         project_id: Uuid,
         user_id: Uuid,
         session_type: String,
@@ -34,61 +41,61 @@ impl LlmSessionRepository {
             ..Default::default()
         };
         
-        let _result = llm_session::Entity::insert(session).exec(db).await?;
+        let _result = llm_session::Entity::insert(session).exec(&self.db).await?;
         
         // 获取插入的会话
         llm_session::Entity::find_by_id(session_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("LlmSession", session_id))
     }
     
     /// 根据ID查找LLM会话
-    pub async fn find_by_id(db: &DatabaseConnection, session_id: Uuid) -> Result<Option<llm_session::Model>> {
+    pub async fn find_by_id(&self, session_id: Uuid) -> Result<Option<llm_session::Model>> {
         llm_session::Entity::find_by_id(session_id)
-            .one(db)
+            .one(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据项目ID查找LLM会话
-    pub async fn find_by_project(db: &DatabaseConnection, project_id: Uuid) -> Result<Vec<llm_session::Model>> {
+    pub async fn find_by_project(&self, project_id: Uuid) -> Result<Vec<llm_session::Model>> {
         llm_session::Entity::find()
             .filter(llm_session::Column::ProjectId.eq(project_id))
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据会话类型查找LLM会话
-    pub async fn find_by_type(db: &DatabaseConnection, project_id: Uuid, session_type: &str) -> Result<Vec<llm_session::Model>> {
+    pub async fn find_by_type(&self, project_id: Uuid, session_type: &str) -> Result<Vec<llm_session::Model>> {
         llm_session::Entity::find()
             .filter(llm_session::Column::ProjectId.eq(project_id))
             .filter(llm_session::Column::SessionType.eq(session_type))
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 查找活跃的LLM会话
-    pub async fn find_active(db: &DatabaseConnection, project_id: Uuid) -> Result<Vec<llm_session::Model>> {
+    pub async fn find_active(&self, project_id: Uuid) -> Result<Vec<llm_session::Model>> {
         llm_session::Entity::find()
             .filter(llm_session::Column::ProjectId.eq(project_id))
             .filter(llm_session::Column::Status.eq("active"))
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新会话结果
     pub async fn update_result(
-        db: &DatabaseConnection,
+        &self,
         session_id: Uuid,
         result_data: JsonValue,
         status: String,
     ) -> Result<llm_session::Model> {
         let session = llm_session::Entity::find_by_id(session_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("LlmSession", session_id))?;
         
@@ -103,21 +110,21 @@ impl LlmSessionRepository {
             session.completed_at = Set(Some(now));
         }
         
-        session.update(db)
+        session.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新提示词
     pub async fn update_prompts(
-        db: &DatabaseConnection,
+        &self,
         session_id: Uuid,
         system_prompt: Option<String>,
         decomposition_prompt: Option<String>,
         allocation_prompt: Option<String>,
     ) -> Result<llm_session::Model> {
         let session = llm_session::Entity::find_by_id(session_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("LlmSession", session_id))?;
         
@@ -137,15 +144,15 @@ impl LlmSessionRepository {
         
         session.updated_at = Set(chrono::Utc::now().into());
         
-        session.update(db)
+        session.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 删除LLM会话
-    pub async fn delete(db: &DatabaseConnection, session_id: Uuid) -> Result<()> {
+    pub async fn delete(&self, session_id: Uuid) -> Result<()> {
         llm_session::Entity::delete_by_id(session_id)
-            .exec(db)
+            .exec(&self.db)
             .await?;
         
         Ok(())

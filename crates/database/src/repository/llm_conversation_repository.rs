@@ -5,12 +5,19 @@ use sea_orm::{EntityTrait, Set, ColumnTrait, QueryFilter, QueryOrder, QuerySelec
 use uuid::Uuid;
 
 /// LLM对话仓储
-pub struct LlmConversationRepository;
+pub struct LlmConversationRepository {
+    db: DatabaseConnection,
+}
 
 impl LlmConversationRepository {
+    /// 创建新的LLM对话仓储实例
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
     /// 创建新对话消息
     pub async fn create_message(
-        db: &DatabaseConnection,
+        &self,
         session_id: Uuid,
         role: String,
         content: String,
@@ -29,18 +36,18 @@ impl LlmConversationRepository {
             ..Default::default()
         };
         
-        let _result = llm_conversation::Entity::insert(message).exec(db).await?;
+        let _result = llm_conversation::Entity::insert(message).exec(&self.db).await?;
         
         // 获取插入的消息
         llm_conversation::Entity::find_by_id(message_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("LlmConversation", message_id))
     }
     
     /// 创建带元数据的对话消息
     pub async fn create_message_with_metadata(
-        db: &DatabaseConnection,
+        &self,
         session_id: Uuid,
         role: String,
         content: String,
@@ -64,57 +71,57 @@ impl LlmConversationRepository {
             created_at: Set(now),
         };
         
-        let _result = llm_conversation::Entity::insert(message).exec(db).await?;
+        let _result = llm_conversation::Entity::insert(message).exec(&self.db).await?;
         
         // 获取插入的消息
         llm_conversation::Entity::find_by_id(message_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("LlmConversation", message_id))
     }
     
     /// 根据ID查找对话消息
-    pub async fn find_by_id(db: &DatabaseConnection, message_id: Uuid) -> Result<Option<llm_conversation::Model>> {
+    pub async fn find_by_id(&self, message_id: Uuid) -> Result<Option<llm_conversation::Model>> {
         llm_conversation::Entity::find_by_id(message_id)
-            .one(db)
+            .one(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据会话ID查找对话消息（按顺序排列）
-    pub async fn find_by_session(db: &DatabaseConnection, session_id: Uuid) -> Result<Vec<llm_conversation::Model>> {
+    pub async fn find_by_session(&self, session_id: Uuid) -> Result<Vec<llm_conversation::Model>> {
         llm_conversation::Entity::find()
             .filter(llm_conversation::Column::SessionId.eq(session_id))
             .order_by_asc(llm_conversation::Column::MessageOrder)
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 获取会话的最新消息
-    pub async fn find_latest_by_session(db: &DatabaseConnection, session_id: Uuid, limit: u64) -> Result<Vec<llm_conversation::Model>> {
+    pub async fn find_latest_by_session(&self, session_id: Uuid, limit: u64) -> Result<Vec<llm_conversation::Model>> {
         llm_conversation::Entity::find()
             .filter(llm_conversation::Column::SessionId.eq(session_id))
             .order_by_desc(llm_conversation::Column::MessageOrder)
             .limit(limit)
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据角色查找对话消息
-    pub async fn find_by_role(db: &DatabaseConnection, session_id: Uuid, role: &str) -> Result<Vec<llm_conversation::Model>> {
+    pub async fn find_by_role(&self, session_id: Uuid, role: &str) -> Result<Vec<llm_conversation::Model>> {
         llm_conversation::Entity::find()
             .filter(llm_conversation::Column::SessionId.eq(session_id))
             .filter(llm_conversation::Column::Role.eq(role))
             .order_by_asc(llm_conversation::Column::MessageOrder)
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 获取会话的Token统计
-    pub async fn get_token_stats(db: &DatabaseConnection, session_id: Uuid) -> Result<(i32, i32)> {
+    pub async fn get_token_stats(&self, session_id: Uuid) -> Result<(i32, i32)> {
         use sea_orm::{QuerySelect, FromQueryResult};
         
         #[derive(FromQueryResult)]
@@ -129,7 +136,7 @@ impl LlmConversationRepository {
             .column_as(llm_conversation::Column::TokenCount.sum(), "total_tokens")
             .column_as(llm_conversation::Column::MessageId.count(), "message_count")
             .into_model::<TokenStats>()
-            .one(db)
+            .one(&self.db)
             .await
             .map_err(DatabaseError::from)?;
         
@@ -141,19 +148,19 @@ impl LlmConversationRepository {
     }
     
     /// 删除对话消息
-    pub async fn delete(db: &DatabaseConnection, message_id: Uuid) -> Result<()> {
+    pub async fn delete(&self, message_id: Uuid) -> Result<()> {
         llm_conversation::Entity::delete_by_id(message_id)
-            .exec(db)
+            .exec(&self.db)
             .await?;
         
         Ok(())
     }
     
     /// 删除会话的所有对话消息
-    pub async fn delete_by_session(db: &DatabaseConnection, session_id: Uuid) -> Result<()> {
+    pub async fn delete_by_session(&self, session_id: Uuid) -> Result<()> {
         llm_conversation::Entity::delete_many()
             .filter(llm_conversation::Column::SessionId.eq(session_id))
-            .exec(db)
+            .exec(&self.db)
             .await?;
         
         Ok(())

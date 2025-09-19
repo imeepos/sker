@@ -5,12 +5,19 @@ use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter};
 use uuid::Uuid;
 
 /// 需求文档仓储
-pub struct RequirementDocumentRepository;
+pub struct RequirementDocumentRepository {
+    db: DatabaseConnection,
+}
 
 impl RequirementDocumentRepository {
+    /// 创建新的需求文档仓储实例
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
     /// 创建新需求文档
     pub async fn create(
-        db: &DatabaseConnection,
+        &self,
         project_id: Uuid,
         title: String,
         content: String,
@@ -33,62 +40,62 @@ impl RequirementDocumentRepository {
             ..Default::default()
         };
         
-        let _result = requirement_document::Entity::insert(document).exec(db).await?;
+        let _result = requirement_document::Entity::insert(document).exec(&self.db).await?;
         
         // 获取插入的文档
         requirement_document::Entity::find_by_id(document_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("RequirementDocument", document_id))
     }
     
     /// 根据ID查找需求文档
-    pub async fn find_by_id(db: &DatabaseConnection, document_id: Uuid) -> Result<Option<requirement_document::Model>> {
+    pub async fn find_by_id(&self, document_id: Uuid) -> Result<Option<requirement_document::Model>> {
         requirement_document::Entity::find_by_id(document_id)
-            .one(db)
+            .one(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据项目ID查找需求文档
-    pub async fn find_by_project(db: &DatabaseConnection, project_id: Uuid) -> Result<Vec<requirement_document::Model>> {
+    pub async fn find_by_project(&self, project_id: Uuid) -> Result<Vec<requirement_document::Model>> {
         requirement_document::Entity::find()
             .filter(requirement_document::Column::ProjectId.eq(project_id))
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据文档类型查找需求文档
-    pub async fn find_by_type(db: &DatabaseConnection, project_id: Uuid, document_type: &str) -> Result<Vec<requirement_document::Model>> {
+    pub async fn find_by_type(&self, project_id: Uuid, document_type: &str) -> Result<Vec<requirement_document::Model>> {
         requirement_document::Entity::find()
             .filter(requirement_document::Column::ProjectId.eq(project_id))
             .filter(requirement_document::Column::DocumentType.eq(document_type))
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 查找未处理的需求文档
-    pub async fn find_unprocessed(db: &DatabaseConnection, project_id: Uuid) -> Result<Vec<requirement_document::Model>> {
+    pub async fn find_unprocessed(&self, project_id: Uuid) -> Result<Vec<requirement_document::Model>> {
         requirement_document::Entity::find()
             .filter(requirement_document::Column::ProjectId.eq(project_id))
             .filter(requirement_document::Column::LlmProcessed.eq(false))
-            .all(db)
+            .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新需求文档内容
     pub async fn update_content(
-        db: &DatabaseConnection,
+        &self,
         document_id: Uuid,
         title: Option<String>,
         content: Option<String>,
         priority: Option<String>,
     ) -> Result<requirement_document::Model> {
         let document = requirement_document::Entity::find_by_id(document_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("RequirementDocument", document_id))?;
         
@@ -108,20 +115,20 @@ impl RequirementDocumentRepository {
         
         document.updated_at = Set(chrono::Utc::now().into());
         
-        document.update(db)
+        document.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新LLM处理状态
     pub async fn update_llm_processing(
-        db: &DatabaseConnection,
+        &self,
         document_id: Uuid,
         structured_content: String,
         processing_session_id: Uuid,
     ) -> Result<requirement_document::Model> {
         let document = requirement_document::Entity::find_by_id(document_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("RequirementDocument", document_id))?;
         
@@ -134,15 +141,15 @@ impl RequirementDocumentRepository {
         document.processed_at = Set(Some(now));
         document.updated_at = Set(now);
         
-        document.update(db)
+        document.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 删除需求文档
-    pub async fn delete(db: &DatabaseConnection, document_id: Uuid) -> Result<()> {
+    pub async fn delete(&self, document_id: Uuid) -> Result<()> {
         requirement_document::Entity::delete_by_id(document_id)
-            .exec(db)
+            .exec(&self.db)
             .await?;
         
         Ok(())
