@@ -1,3 +1,2 @@
 // api 导出
-
-export {};
+export * from './chatApi';

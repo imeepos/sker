@@ -1,3 +1,2 @@
 // components 导出
-
-export {};
+export * from './LoginForm';

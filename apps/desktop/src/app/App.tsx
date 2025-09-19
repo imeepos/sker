@@ -1,6 +1,4 @@
 // 应用根组件
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import {
   AppLayout,
   PageHeader,
@@ -8,16 +6,7 @@ import {
 } from '@/shared/components/layout';
 import { Button } from '@/shared/components/ui';
 import { useAppStore, appSelectors } from '@/shared/stores/app';
-
-// 创建 Query Client
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 2,
-      staleTime: 5 * 60 * 1000, // 5 分钟
-    },
-  },
-});
+import { Providers } from './providers';
 
 /**
  * 应用内容组件
@@ -147,9 +136,8 @@ function AppContent() {
  */
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <Providers>
       <AppContent />
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+    </Providers>
   );
 }

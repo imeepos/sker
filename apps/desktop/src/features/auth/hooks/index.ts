@@ -1,3 +1,2 @@
 // hooks 导出
-
-export {};
+export * from './useAuth';

@@ -1,4 +1,2 @@
 // 通用组件导出
-// 这里将来会添加通用业务组件
-
-export {};
+export { ErrorBoundary, withErrorBoundary, AsyncErrorBoundary } from './ErrorBoundary';
