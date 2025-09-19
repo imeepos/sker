@@ -4,6 +4,7 @@ import { cn } from '../lib/utils'
 import { LeftSidebar } from '../components/chat-pro/LeftSidebar'
 import { ConversationList } from '../components/chat-pro/ConversationList'
 import { AgentsSidebar } from './AgentsSidebar'
+import { ProjectsSidebar } from './ProjectsSidebar'
 
 export type NavigationItem = 
   | 'messages' 
@@ -42,6 +43,8 @@ interface AppLayoutProps {
   onDeleteConversation?: (conversationId: string) => void
   /** 创建Agent回调 */
   onCreateAgent?: () => void
+  /** 创建项目回调 */
+  onCreateProject?: () => void
 }
 
 // 导航项到路由的映射
@@ -78,7 +81,8 @@ export function AppLayout({
   conversations = [],
   onCreateConversation,
   onDeleteConversation,
-  onCreateAgent
+  onCreateAgent,
+  onCreateProject
 }: AppLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -130,6 +134,8 @@ export function AppLayout({
       return 'conversations'
     } else if (selectedNavigation === 'agents') {
       return 'agents'
+    } else if (selectedNavigation === 'project-management') {
+      return 'projects'
     } else {
       return 'default'
     }
@@ -161,16 +167,15 @@ export function AppLayout({
           <AgentsSidebar
             onCreateAgent={onCreateAgent}
           />
+        ) : sidebarContent === 'projects' ? (
+          <ProjectsSidebar
+            onCreateProject={onCreateProject}
+          />
         ) : (
           <div className="h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">
               <h3 className="font-medium mb-2">{getNavigationLabel(selectedNavigation)}</h3>
-              <p className="text-sm">
-                {selectedNavigation === 'project-management' ? 
-                  '请在右侧查看项目管理界面' : 
-                  '功能即将上线'
-                }
-              </p>
+              <p className="text-sm">功能即将上线</p>
             </div>
           </div>
         )}

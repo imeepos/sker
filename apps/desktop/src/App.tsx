@@ -21,6 +21,7 @@ function App() {
               <Route path="messages/:conversationId" element={<MessagesWrapper />} />
               {/* 项目管理路由 */}
               <Route path="project-management" element={<ProjectManagementPage />} />
+              <Route path="project-management/:projectId" element={<ProjectManagementPage />} />
               {/* Agent管理路由 */}
               <Route path="agents" element={<AgentsWrapper />} />
               <Route path="agents/:agentId" element={<AgentsWrapper />} />

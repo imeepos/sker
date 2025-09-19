@@ -169,6 +169,9 @@ export function Home() {
           onCreateAgent={() => {
             console.log('创建Agent功能待实现')
           }}
+          onCreateProject={() => {
+            console.log('创建项目功能待实现')
+          }}
         />
       </div>
 
