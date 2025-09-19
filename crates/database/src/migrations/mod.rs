@@ -57,6 +57,15 @@ impl Migrator {
         // 创建事件发布日志表
         Self::create_event_publish_log_table(db).await?;
         
+        // 创建代码审查表
+        Self::create_code_reviews_table(db).await?;
+        
+        // 创建任务依赖表
+        Self::create_task_dependencies_table(db).await?;
+        
+        // 创建Agent性能指标表
+        Self::create_agent_performance_metrics_table(db).await?;
+        
         Ok(())
     }
     
@@ -118,6 +127,8 @@ impl Migrator {
                 status TEXT NOT NULL DEFAULT 'active',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                quality_standards TEXT,
+                automation_config TEXT,
                 FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
             )
         "#;
@@ -278,6 +289,9 @@ impl Migrator {
                 completed_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                dependency_count INTEGER NOT NULL DEFAULT 0,
+                blocking_tasks_count INTEGER NOT NULL DEFAULT 0,
+                execution_result TEXT,
                 FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
                 FOREIGN KEY (parent_task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
                 FOREIGN KEY (llm_session_id) REFERENCES llm_sessions(session_id) ON DELETE SET NULL
@@ -325,6 +339,9 @@ impl Migrator {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 last_active_at TEXT NOT NULL,
+                skill_profile TEXT,
+                skill_assessments TEXT,
+                performance_trend TEXT,
                 FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
             )
         "#;
@@ -632,6 +649,119 @@ impl Migrator {
         Ok(())
     }
     
+    /// 创建代码审查表
+    async fn create_code_reviews_table<C>(db: &C) -> Result<(), DbErr>
+    where
+        C: ConnectionTrait,
+    {
+        let sql = r#"
+            CREATE TABLE IF NOT EXISTS code_reviews (
+                review_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                execution_session_id TEXT NOT NULL,
+                reviewer_agent_id TEXT NOT NULL,
+                pull_request_url TEXT NOT NULL,
+                source_branch TEXT NOT NULL,
+                target_branch TEXT NOT NULL,
+                review_comments TEXT NOT NULL,
+                code_changes TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                decision TEXT,
+                overall_comment TEXT,
+                created_at TEXT NOT NULL,
+                reviewed_at TEXT,
+                FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
+                FOREIGN KEY (execution_session_id) REFERENCES execution_sessions(session_id) ON DELETE CASCADE,
+                FOREIGN KEY (reviewer_agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE
+            )
+        "#;
+        
+        db.execute_unprepared(sql).await?;
+        
+        // 创建索引
+        let index_sql = vec![
+            "CREATE INDEX IF NOT EXISTS idx_code_reviews_task ON code_reviews(task_id)",
+            "CREATE INDEX IF NOT EXISTS idx_code_reviews_session ON code_reviews(execution_session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_code_reviews_reviewer ON code_reviews(reviewer_agent_id)",
+            "CREATE INDEX IF NOT EXISTS idx_code_reviews_status ON code_reviews(status)",
+        ];
+        
+        for sql in index_sql {
+            db.execute_unprepared(sql).await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// 创建任务依赖表
+    async fn create_task_dependencies_table<C>(db: &C) -> Result<(), DbErr>
+    where
+        C: ConnectionTrait,
+    {
+        let sql = r#"
+            CREATE TABLE IF NOT EXISTS task_dependencies (
+                dependency_id TEXT PRIMARY KEY,
+                parent_task_id TEXT NOT NULL,
+                child_task_id TEXT NOT NULL,
+                dependency_type TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (parent_task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
+                FOREIGN KEY (child_task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+            )
+        "#;
+        
+        db.execute_unprepared(sql).await?;
+        
+        // 创建索引
+        let index_sql = vec![
+            "CREATE INDEX IF NOT EXISTS idx_task_deps_parent ON task_dependencies(parent_task_id)",
+            "CREATE INDEX IF NOT EXISTS idx_task_deps_child ON task_dependencies(child_task_id)",
+            "CREATE INDEX IF NOT EXISTS idx_task_deps_type ON task_dependencies(dependency_type)",
+        ];
+        
+        for sql in index_sql {
+            db.execute_unprepared(sql).await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// 创建Agent性能指标表
+    async fn create_agent_performance_metrics_table<C>(db: &C) -> Result<(), DbErr>
+    where
+        C: ConnectionTrait,
+    {
+        let sql = r#"
+            CREATE TABLE IF NOT EXISTS agent_performance_metrics (
+                metrics_id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                tasks_completed INTEGER NOT NULL,
+                tasks_successful INTEGER NOT NULL,
+                avg_completion_time REAL NOT NULL,
+                avg_code_quality REAL NOT NULL,
+                skill_improvements TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE
+            )
+        "#;
+        
+        db.execute_unprepared(sql).await?;
+        
+        // 创建索引
+        let index_sql = vec![
+            "CREATE INDEX IF NOT EXISTS idx_perf_metrics_agent ON agent_performance_metrics(agent_id)",
+            "CREATE INDEX IF NOT EXISTS idx_perf_metrics_period ON agent_performance_metrics(period_start, period_end)",
+        ];
+        
+        for sql in index_sql {
+            db.execute_unprepared(sql).await?;
+        }
+        
+        Ok(())
+    }
+    
     /// 检查迁移状态
     pub async fn status<C>(db: &C) -> Result<Vec<String>, DbErr>
     where
@@ -643,7 +773,8 @@ impl Migrator {
             WHERE type='table' AND name IN (
                 'users', 'projects', 'requirement_documents', 'llm_sessions', 'llm_conversations', 'tasks',
                 'agents', 'agent_work_history', 'execution_sessions', 'execution_logs',
-                'conflicts', 'human_decisions', 'domain_events', 'event_publish_log'
+                'conflicts', 'human_decisions', 'domain_events', 'event_publish_log',
+                'code_reviews', 'task_dependencies', 'agent_performance_metrics'
             )
         "#;
         
