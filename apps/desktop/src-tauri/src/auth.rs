@@ -10,7 +10,7 @@ use codex_database::{
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
 use uuid::Uuid;
-use chrono::{Utc, Duration};
+use chrono::Utc;
 use std::sync::Arc;
 use tauri::{State, Manager, AppHandle};
 
@@ -178,7 +178,7 @@ impl AuthService {
         let expires_in_hours = 24;
         
         // 更新会话
-        let updated_session = session_repo.refresh_token(
+        let _updated_session = session_repo.refresh_token(
             session.session_id,
             new_token.clone(),
             new_refresh_token.clone(),
@@ -355,7 +355,7 @@ pub async fn refresh_token(
 pub async fn logout(
     token: String,
     db: State<'_, Arc<DatabaseConnection>>,
-    app: AppHandle,
+    _app: AppHandle,
 ) -> Result<(), String> {
     let auth_service = AuthService::new((**db).clone());
     auth_service.logout(&token).await?;

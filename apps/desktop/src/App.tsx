@@ -102,6 +102,14 @@ function AppContent() {
           </div>
           
           <div className="flex items-center gap-2">
+            {/* 用户信息 */}
+            <div className="flex items-center gap-2 mr-4">
+              <User className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {user?.username}
+              </span>
+            </div>
+
             {/* 界面模式切换按钮 */}
             {viewMode !== 'default' && (
               <Button 
@@ -147,6 +155,15 @@ function AppContent() {
             >
               <Settings className="w-4 h-4" />
             </Button>
+
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={logout}
+              title="注销"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>
@@ -180,6 +197,17 @@ function AppContent() {
       <SettingsDialog />
     </div>
   )
+}
+
+// 主应用组件，包含认证提供者和守卫
+function App() {
+  return (
+    <AuthProvider>
+      <AuthGuard>
+        <AppContent />
+      </AuthGuard>
+    </AuthProvider>
+  );
 }
 
 export default App

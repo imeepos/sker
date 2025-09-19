@@ -1,7 +1,8 @@
 //! 用户会话仓储实现
 
 use crate::{entities::user_session, DatabaseConnection, DatabaseError, Result};
-use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder, Expr};
+use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::prelude::Expr;
 use uuid::Uuid;
 use chrono::{Duration, Utc};
 
@@ -153,7 +154,7 @@ impl UserSessionRepository {
     
     /// 清理过期会话
     pub async fn cleanup_expired_sessions(&self) -> Result<u64> {
-        let now = Utc::now().into();
+        let now: sea_orm::prelude::DateTimeWithTimeZone = Utc::now().into();
         
         let result = user_session::Entity::delete_many()
             .filter(user_session::Column::ExpiresAt.lt(now))
