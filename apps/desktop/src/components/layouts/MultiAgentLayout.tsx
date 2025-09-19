@@ -313,7 +313,7 @@ export function MultiAgentLayout({
   onDeleteAgent,
   onCreateProject,
   onEditProject,
-  onCreateTask,
+  // onCreateTask,
   onAssignTask,
   onUpdateTaskStatus
 }: MultiAgentLayoutProps) {
@@ -432,10 +432,9 @@ export function MultiAgentLayout({
         return (
           <ProjectList
             projects={projects}
-            selectedProjectId={selectedProject?.id || null}
+            selectedProjectId={selectedProject?.id || undefined}
             onProjectSelect={handleProjectSelect}
             onCreateProject={onCreateProject}
-            searchPlaceholder="搜索项目..."
           />
         )
         
@@ -443,10 +442,8 @@ export function MultiAgentLayout({
         return (
           <TaskList
             tasks={tasks}
-            selectedTaskId={selectedTask?.id || null}
+            selectedTaskId={selectedTask?.id || undefined}
             onTaskSelect={handleTaskSelect}
-            onCreateTask={onCreateTask}
-            searchPlaceholder="搜索任务..."
           />
         )
         
