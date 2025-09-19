@@ -14,6 +14,9 @@ pub mod conflict;
 pub mod human_decision;
 pub mod domain_event;
 pub mod event_publish_log;
+pub mod code_review;
+pub mod task_dependency;
+pub mod agent_performance_metrics;
 
 // 重新导出所有实体
 pub use user::Entity as User;
@@ -30,3 +33,6 @@ pub use conflict::Entity as Conflict;
 pub use human_decision::Entity as HumanDecision;
 pub use domain_event::Entity as DomainEvent;
 pub use event_publish_log::Entity as EventPublishLog;
+pub use code_review::Entity as CodeReview;
+pub use task_dependency::Entity as TaskDependency;
+pub use agent_performance_metrics::Entity as AgentPerformanceMetrics;
