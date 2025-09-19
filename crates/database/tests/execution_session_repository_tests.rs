@@ -9,7 +9,7 @@ use codex_database::{
         project_repository::CreateProjectData,
         agent_repository::CreateAgentData,
         task_repository::CreateTaskData,
-        execution_session_repository::{CreateSessionData, SessionFilter, SessionStatistics},
+        execution_session_repository::{CreateSessionData, SessionFilter},
     },
     entities::execution_session::ExecutionStatus,
 };

@@ -132,13 +132,13 @@ async fn test_conflict_escalation() {
     let mut conflict_active: conflict::ActiveModel = created_conflict.into();
     conflict_active.status = Set(ConflictStatus::Escalated.to_string());
     conflict_active.escalated_to_human = Set(true);
-    conflict_active.assigned_user_id = Set(Some(user.user_id));
+    conflict_active.assigned_user_id = Set(Some(_user.user_id));
     conflict_active.escalated_at = Set(Some(chrono::Utc::now().into()));
     
     let escalated_conflict = conflict_active.update(&db).await.expect("上报冲突失败");
     assert_eq!(escalated_conflict.status, ConflictStatus::Escalated.to_string());
     assert_eq!(escalated_conflict.escalated_to_human, true);
-    assert_eq!(escalated_conflict.assigned_user_id, Some(user.user_id));
+    assert_eq!(escalated_conflict.assigned_user_id, Some(_user.user_id));
     assert!(escalated_conflict.escalated_at.is_some());
 }
 
@@ -162,7 +162,7 @@ async fn test_conflict_resolution() {
         affected_agents: Set(json!([])),
         status: Set(ConflictStatus::Escalated.to_string()),
         escalated_to_human: Set(true),
-        assigned_user_id: Set(Some(user.user_id)),
+        assigned_user_id: Set(Some(_user.user_id)),
         resolution_strategy: Set(None),
         resolution_note: Set(None),
         auto_resolved: Set(false),
@@ -204,7 +204,7 @@ async fn test_human_decision_creation() {
         affected_agents: Set(json!(["agent-006"])),
         status: Set(ConflictStatus::Escalated.to_string()),
         escalated_to_human: Set(true),
-        assigned_user_id: Set(Some(user.user_id)),
+        assigned_user_id: Set(Some(_user.user_id)),
         resolution_strategy: Set(None),
         resolution_note: Set(None),
         auto_resolved: Set(false),
@@ -249,7 +249,7 @@ async fn test_human_decision_creation() {
     let decision = human_decision::ActiveModel {
         decision_id: Set(Uuid::new_v4()),
         conflict_id: Set(created_conflict.conflict_id),
-        user_id: Set(user.user_id),
+        user_id: Set(_user.user_id),
         decision_type: Set(DecisionType::Modify.to_string()),
         decision_data: Set(Some(decision_data.clone())),
         reasoning: Set(Some("调整任务优先级和时间线以避免资源冲突".to_string())),
@@ -262,7 +262,7 @@ async fn test_human_decision_creation() {
     
     // 验证决策创建成功
     assert_eq!(created_decision.conflict_id, created_conflict.conflict_id);
-    assert_eq!(created_decision.user_id, user.user_id);
+    assert_eq!(created_decision.user_id, _user.user_id);
     assert_eq!(created_decision.decision_type, DecisionType::Modify.to_string());
     assert_eq!(created_decision.decision_data, Some(decision_data));
     assert_eq!(created_decision.follow_up_actions, follow_up_actions);
