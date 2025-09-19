@@ -93,18 +93,16 @@ impl SessionManager {
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         );
 
-        let (session, mut exit_rx) =
-            create_exec_command_session(params.clone())
-                .await
-                .map_err(|err| {
-                    format!(
-                        "failed to create exec command session for session id {}: {err}",
-                        session_id.0
-                    )
-                })?;
+        let (session, mut output_rx, mut exit_rx) = create_exec_command_session(params.clone())
+            .await
+            .map_err(|err| {
+                format!(
+                    "failed to create exec command session for session id {}: {err}",
+                    session_id.0
+                )
+            })?;
 
         // Insert into session map.
-        let mut output_rx = session.output_receiver();
         self.sessions.lock().await.insert(session_id, session);
 
         // Collect output until either timeout expires or process exits.
@@ -242,95 +240,14 @@ impl SessionManager {
     }
 }
 
-/// 将Unix风格的命令转换为Windows兼容的命令
-fn convert_command_for_windows(cmd: &str) -> String {
-    let cmd_trim = cmd.trim();
-    
-    if cmd_trim.starts_with("ls") {
-        // 解析ls命令的参数
-        let ls_args = cmd_trim.strip_prefix("ls").unwrap_or("").trim();
-        
-        // 检查常见的ls参数（包括组合参数如-al）
-        let has_long_format = ls_args.contains("-l") || ls_args.contains("-al") || ls_args.contains("-la") || ls_args.contains("-ll");
-        let has_all = ls_args.contains("-a") || ls_args.contains("-al") || ls_args.contains("-la") || ls_args.contains("-aa");
-        
-        // 提取路径（去除所有参数）
-        let path = ls_args
-            .replace("-al", "")  // 先处理组合参数
-            .replace("-la", "")
-            .replace("-l", "")   // 再处理单独参数
-            .replace("-a", "")
-            .replace("-ll", "")
-            .replace("-aa", "")
-            .trim()
-            .to_string();
-        
-        // 构建PowerShell命令
-        let base_cmd = if path.is_empty() {
-            "Get-ChildItem".to_string()
-        } else {
-            format!("Get-ChildItem '{}'", path)
-        };
-        
-        if has_all {
-            // 包括隐藏文件
-            let base_with_hidden = if path.is_empty() {
-                "Get-ChildItem -Force".to_string()
-            } else {
-                format!("Get-ChildItem '{}' -Force", path)
-            };
-            
-            if has_long_format {
-                format!("{} | Format-Table -Property Mode,LastWriteTime,Length,Name", base_with_hidden)
-            } else {
-                base_with_hidden
-            }
-        } else if has_long_format {
-            format!("{} | Format-Table -Property Mode,LastWriteTime,Length,Name", base_cmd)
-        } else {
-            base_cmd
-        }
-    } else if cmd_trim.starts_with("pwd") {
-        "Get-Location".to_string()
-    } else if cmd_trim.starts_with("cat ") {
-        let file = cmd_trim.strip_prefix("cat").unwrap_or("").trim();
-        format!("Get-Content '{}'", file)
-    } else if cmd_trim.starts_with("grep ") {
-        // 基本的grep转换为Select-String
-        let args = cmd_trim.strip_prefix("grep").unwrap_or("").trim();
-        format!("Select-String {}", args)
-    } else if cmd_trim.starts_with("mkdir ") {
-        let dir = cmd_trim.strip_prefix("mkdir").unwrap_or("").trim();
-        format!("New-Item -ItemType Directory '{}'", dir)
-    } else if cmd_trim.starts_with("rm ") {
-        let file = cmd_trim.strip_prefix("rm").unwrap_or("").trim();
-        format!("Remove-Item '{}'", file)
-    } else if cmd_trim.starts_with("cp ") {
-        let args = cmd_trim.strip_prefix("cp").unwrap_or("").trim();
-        let parts: Vec<&str> = args.split_whitespace().collect();
-        if parts.len() >= 2 {
-            format!("Copy-Item '{}' '{}'", parts[0], parts[1])
-        } else {
-            cmd.to_string()
-        }
-    } else if cmd_trim.starts_with("mv ") {
-        let args = cmd_trim.strip_prefix("mv").unwrap_or("").trim();
-        let parts: Vec<&str> = args.split_whitespace().collect();
-        if parts.len() >= 2 {
-            format!("Move-Item '{}' '{}'", parts[0], parts[1])
-        } else {
-            cmd.to_string()
-        }
-    } else {
-        // 其他命令保持不变
-        cmd.to_string()
-    }
-}
-
 /// Spawn PTY and child process per spawn_exec_command_session logic.
 async fn create_exec_command_session(
     params: ExecCommandParams,
-) -> anyhow::Result<(ExecCommandSession, oneshot::Receiver<i32>)> {
+) -> anyhow::Result<(
+    ExecCommandSession,
+    tokio::sync::broadcast::Receiver<Vec<u8>>,
+    oneshot::Receiver<i32>,
+)> {
     let ExecCommandParams {
         cmd,
         yield_time_ms: _,
@@ -338,17 +255,6 @@ async fn create_exec_command_session(
         shell,
         login,
     } = params;
-    
-    // 如果是Windows下的PowerShell，转换命令
-    let final_cmd = if (shell.contains("powershell") || shell.contains("pwsh")) && cfg!(target_os = "windows") {
-        let converted = convert_command_for_windows(&cmd);
-        if converted != cmd {
-            tracing::info!("命令转换: '{}' -> '{}'", cmd, converted);
-        }
-        converted
-    } else {
-        cmd
-    };
 
     // Use the native pty implementation for the system
     let pty_system = native_pty_system();
@@ -362,23 +268,10 @@ async fn create_exec_command_session(
     })?;
 
     // Spawn a shell into the pty
-    let mut command_builder = CommandBuilder::new(&shell);
-    
-    // 根据shell类型和操作系统调整参数
-    if shell.contains("powershell") || shell.contains("pwsh") {
-        // PowerShell参数
-        command_builder.arg("-Command");
-        command_builder.arg(&final_cmd);
-    } else if shell.contains("cmd") {
-        // CMD参数
-        command_builder.arg("/C");
-        command_builder.arg(&final_cmd);
-    } else {
-        // Unix shell参数
-        let shell_mode_opt = if login { "-lc" } else { "-c" };
-        command_builder.arg(shell_mode_opt);
-        command_builder.arg(&final_cmd);
-    }
+    let mut command_builder = CommandBuilder::new(shell);
+    let shell_mode_opt = if login { "-lc" } else { "-c" };
+    command_builder.arg(shell_mode_opt);
+    command_builder.arg(cmd);
 
     let mut child = pair.slave.spawn_command(command_builder)?;
     // Obtain a killer that can signal the process independently of `.wait()`.
@@ -388,8 +281,6 @@ async fn create_exec_command_session(
     let (writer_tx, mut writer_rx) = mpsc::channel::<Vec<u8>>(128);
     // Broadcast for streaming PTY output to readers: subscribers receive from subscription time.
     let (output_tx, _) = tokio::sync::broadcast::channel::<Vec<u8>>(256);
-    let initial_output_rx = output_tx.subscribe();
-
     // Reader task: drain PTY and forward chunks to output channel.
     let mut reader = pair.master.try_clone_reader()?;
     let output_tx_clone = output_tx.clone();
@@ -451,7 +342,7 @@ async fn create_exec_command_session(
     });
 
     // Create and store the session with channels.
-    let session = ExecCommandSession::new(
+    let (session, initial_output_rx) = ExecCommandSession::new(
         writer_tx,
         output_tx,
         killer,
@@ -460,8 +351,7 @@ async fn create_exec_command_session(
         wait_handle,
         exit_status,
     );
-    session.set_initial_output_receiver(initial_output_rx);
-    Ok((session, exit_rx))
+    Ok((session, initial_output_rx, exit_rx))
 }
 
 #[cfg(test)]

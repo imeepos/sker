@@ -272,14 +272,9 @@ pub fn built_in_model_providers() -> HashMap<String, ModelProviderInfo> {
                 base_url: std::env::var("OPENAI_BASE_URL")
                     .ok()
                     .filter(|v| !v.trim().is_empty()),
-                env_key: Some("OPENAI_API_KEY".to_string()),
+                env_key: None,
                 env_key_instructions: None,
-                // 当设置了自定义 base_url 时使用 Chat API，否则使用 Responses API
-                wire_api: if std::env::var("OPENAI_BASE_URL").is_ok() {
-                    WireApi::Chat
-                } else {
-                    WireApi::Responses
-                },
+                wire_api: WireApi::Responses,
                 query_params: None,
                 http_headers: Some(
                     [("version".to_string(), env!("CARGO_PKG_VERSION").to_string())]

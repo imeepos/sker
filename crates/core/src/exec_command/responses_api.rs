@@ -29,7 +29,7 @@ pub fn create_exec_command_tool_for_responses_api() -> ResponsesApiTool {
     properties.insert(
         "shell".to_string(),
         JsonSchema::String {
-            description: Some("The shell to use. Defaults to \"/bin/bash\" on Unix systems and \"powershell\" on Windows.".to_string()),
+            description: Some("The shell to use. Defaults to \"/bin/bash\".".to_string()),
         },
     );
     properties.insert(
@@ -43,17 +43,7 @@ pub fn create_exec_command_tool_for_responses_api() -> ResponsesApiTool {
 
     ResponsesApiTool {
         name: EXEC_COMMAND_TOOL_NAME.to_owned(),
-        description: r#"Execute shell commands on the local machine with streaming output. 
-
-On Windows, commands are automatically converted to PowerShell equivalents:
-- ls -> Get-ChildItem
-- ls -l -> Get-ChildItem | Format-Table
-- ls -al -> Get-ChildItem -Force | Format-Table
-- pwd -> Get-Location
-- cat file -> Get-Content file
-- grep pattern -> Select-String pattern
-
-If a command fails, check the stderr output for error details and adjust the command accordingly."#
+        description: r#"Execute shell commands on the local machine with streaming output."#
             .to_string(),
         strict: false,
         parameters: JsonSchema::Object {

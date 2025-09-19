@@ -232,21 +232,9 @@ impl ModelClient {
             // Always fetch the latest auth in case a prior attempt refreshed the token.
             let auth = auth_manager.as_ref().and_then(|m| m.auth());
 
-            // 详细的API请求日志
-            let request_url = self.provider.get_full_url(&auth);
-            println!("=== HTTP API 请求详情 ===");
-            println!("请求方法: POST");
-            println!("请求URL: {}", request_url);
-            println!("Provider名称: {}", self.provider.name);
-            println!("Wire API类型: {:?}", self.provider.wire_api);
-            println!("Base URL: {:?}", self.provider.base_url);
-            println!("认证模式: {:?}", auth.as_ref().map(|a| &a.mode));
-            println!("有效载荷长度: {} 字节", payload_body.len());
-            println!("========================");
-            
             trace!(
                 "POST to {}: {}",
-                request_url,
+                self.provider.get_full_url(&auth),
                 payload_body.as_str()
             );
 
@@ -326,15 +314,6 @@ impl ModelClient {
                     {
                         // Surface the error body to callers. Use `unwrap_or_default` per Clippy.
                         let body = res.text().await.unwrap_or_default();
-                        
-                        // 详细的HTTP错误日志
-                        println!("=== HTTP 错误详情 ===");
-                        println!("❌ HTTP状态码: {}", status);
-                        println!("❌ 错误响应体: {}", body);
-                        println!("❌ 请求URL: {}", request_url);
-                        println!("❌ Provider: {}", self.provider.name);
-                        println!("====================");
-                        
                         return Err(CodexErr::UnexpectedStatus(status, body));
                     }
 

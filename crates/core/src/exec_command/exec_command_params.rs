@@ -33,12 +33,7 @@ fn default_login() -> bool {
 }
 
 fn default_shell() -> String {
-    if cfg!(target_os = "windows") {
-        // 在Windows下使用PowerShell或cmd
-        "powershell".to_string()
-    } else {
-        "/bin/bash".to_string()
-    }
+    "/bin/bash".to_string()
 }
 
 #[derive(Debug, Deserialize, Serialize)]

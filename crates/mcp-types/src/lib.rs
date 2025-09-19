@@ -15,11 +15,6 @@ use ts_rs::TS;
 pub const MCP_SCHEMA_VERSION: &str = "2025-06-18";
 pub const JSONRPC_VERSION: &str = "2.0";
 
-// 新增模块导出
-pub mod type_mapping;
-pub mod protocol_bridge;
-pub mod event_stream;
-
 /// Paired request/response types for the Model Context Protocol (MCP).
 pub trait ModelContextProtocolRequest {
     const METHOD: &'static str;
@@ -1046,15 +1041,6 @@ pub struct Request {
 pub enum RequestId {
     String(String),
     Integer(i64),
-}
-
-impl std::fmt::Display for RequestId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RequestId::String(s) => write!(f, "{}", s),
-            RequestId::Integer(i) => write!(f, "{}", i),
-        }
-    }
 }
 
 /// A known resource that the server is capable of reading.
