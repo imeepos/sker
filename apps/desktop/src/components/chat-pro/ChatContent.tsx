@@ -17,7 +17,7 @@ import {
   Circle,
   Users
 } from 'lucide-react'
-import type { Conversation } from './ThreeColumnLayout'
+import type { Conversation } from '../../layout'
 import type { ChatProEvent } from './index'
 
 interface ChatContentProps {

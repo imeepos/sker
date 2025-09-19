@@ -14,9 +14,10 @@ import {
   Bot, 
   Users2, 
   Settings,
-  FolderOpen 
+  FolderOpen,
+  Zap
 } from 'lucide-react'
-import type { NavigationItem } from './ThreeColumnLayout'
+import type { NavigationItem } from '../../layout'
 
 interface LeftSidebarProps {
   /** 当前选中的导航项 */
@@ -84,6 +85,11 @@ const navigationItems: Array<{
     key: 'project-management',
     icon: FolderOpen,
     label: '项目管理'
+  },
+  {
+    key: 'agents',
+    icon: Zap,
+    label: 'Agent管理'
   },
   {
     key: 'settings',

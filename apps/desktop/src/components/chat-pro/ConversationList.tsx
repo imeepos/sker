@@ -14,7 +14,7 @@ import {
   Users,
   Circle
 } from 'lucide-react'
-import type { Conversation } from './ThreeColumnLayout'
+import type { Conversation } from '../../layout'
 
 interface ConversationListProps {
   /** 对话列表 */

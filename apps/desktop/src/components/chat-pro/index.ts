@@ -4,8 +4,7 @@ export { ChatProHeader } from './ChatProHeader'
 export { ChatProInput } from './ChatProInput'
 export { EventsList } from './EventsList'
 
-// 三栏布局聊天界面
-export { ThreeColumnLayout } from './ThreeColumnLayout'
+// 聊天界面组件
 export { LeftSidebar } from './LeftSidebar'
 export { ConversationList } from './ConversationList'
 export { ChatContent } from './ChatContent'

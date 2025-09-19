@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils'
 import { ConversationList } from '../chat-pro/ConversationList'
 import { ChatContent } from '../chat-pro/ChatContent'
 import { ChatProEvent } from '../chat-pro/index'
-import type { NavigationItem as BaseNavigationItem, Conversation } from '../chat-pro/ThreeColumnLayout'
+import type { NavigationItem as BaseNavigationItem, Conversation } from '../../layout'
 import type { 
   MultiAgentNavigationItem,
   Agent,
