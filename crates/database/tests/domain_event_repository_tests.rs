@@ -41,7 +41,6 @@ async fn test_create_domain_event() {
     assert_eq!(event.event_version, 1);
     assert!(event.event_data.get("title").is_some());
     assert!(event.occurred_at.naive_utc() <= chrono::Utc::now().naive_utc());
-    assert!(event.created_at.naive_utc() <= chrono::Utc::now().naive_utc());
 }
 
 #[tokio::test]

@@ -98,7 +98,7 @@ impl Related<super::human_decision::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 /// 冲突类型枚举
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ConflictType {
     /// Git合并冲突
     GitMerge,
@@ -125,7 +125,7 @@ impl std::fmt::Display for ConflictType {
 }
 
 /// 冲突严重性枚举
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ConflictSeverity {
     /// 低级
     Low,

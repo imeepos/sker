@@ -23,8 +23,8 @@ mod common;
 async fn create_test_user(db: &codex_database::DatabaseConnection) -> Uuid {
     let repo = UserRepository::new(db.clone());
     let user_data = CreateUserData {
-        username: format!("test_user_{}", Uuid::new_v4().to_string()[..8]),
-        email: format!("test_{}@example.com", Uuid::new_v4().to_string()[..8]),
+        username: format!("test_user_{}", &&Uuid::new_v4().to_string()[..8]),
+        email: format!("test_{}@example.com", &&Uuid::new_v4().to_string()[..8]),
         password_hash: "password_hash".to_string(),
         profile_data: None,
         settings: None,
@@ -38,7 +38,7 @@ async fn create_test_project(db: &codex_database::DatabaseConnection, user_id: U
     let project_repo = ProjectRepository::new(db.clone());
     let project_data = CreateProjectData {
         user_id,
-        name: format!("test_project_{}", Uuid::new_v4().to_string()[..8]),
+        name: format!("test_project_{}", &Uuid::new_v4().to_string()[..8]),
         description: Some("测试项目描述".to_string()),
         repository_url: "https://github.com/test/repo.git".to_string(),
         workspace_path: "/workspace/test".to_string(),
@@ -52,7 +52,7 @@ async fn create_test_agent(db: &codex_database::DatabaseConnection, user_id: Uui
     let agent_repo = AgentRepository::new(db.clone());
     let agent_data = CreateAgentData {
         user_id,
-        name: format!("test_agent_{}", Uuid::new_v4().to_string()[..8]),
+        name: format!("test_agent_{}", &Uuid::new_v4().to_string()[..8]),
         description: Some("测试Agent描述".to_string()),
         prompt_template: "你是一个测试Agent".to_string(),
         capabilities: json!(["Development", "Testing"]),
@@ -70,7 +70,7 @@ async fn create_test_task(db: &codex_database::DatabaseConnection, project_id: U
         project_id,
         parent_task_id: None,
         llm_session_id: None,
-        title: format!("test_task_{}", Uuid::new_v4().to_string()[..8]),
+        title: format!("test_task_{}", &Uuid::new_v4().to_string()[..8]),
         description: "测试任务描述".to_string(),
         task_type: "development".to_string(),
     };

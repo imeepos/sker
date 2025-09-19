@@ -18,8 +18,8 @@ mod common;
 async fn create_test_user(db: &codex_database::DatabaseConnection) -> Uuid {
     let repo = UserRepository::new(db.clone());
     let user_data = CreateUserData {
-        username: format!("test_user_{}", Uuid::new_v4().to_string()[..8]),
-        email: format!("test_{}@example.com", Uuid::new_v4().to_string()[..8]),
+        username: format!("test_user_{}", &Uuid::new_v4().to_string()[..8]),
+        email: format!("test_{}@example.com", &Uuid::new_v4().to_string()[..8]),
         password_hash: "password_hash".to_string(),
         profile_data: None,
         settings: None,
@@ -63,7 +63,7 @@ async fn test_find_conflict_by_id() {
     
     let conflict_repo = ConflictRepository::new(db.clone());
     let conflict_data = CreateConflictData {
-        conflict_type: ConflictType::ResourceContention,
+        conflict_type: ConflictType::Resource,
         severity: ConflictSeverity::Medium,
         title: "资源争用冲突".to_string(),
         description: "多个Agent同时请求相同资源".to_string(),
@@ -95,9 +95,9 @@ async fn test_find_conflicts_by_type() {
     // 创建不同类型的冲突
     let conflict_types = vec![
         (ConflictType::TaskDependency, "依赖冲突1"),
-        (ConflictType::ResourceContention, "资源冲突1"),
+        (ConflictType::Resource, "资源冲突1"),
         (ConflictType::TaskDependency, "依赖冲突2"),
-        (ConflictType::GitMergeConflict, "Git冲突1"),
+        (ConflictType::GitMerge, "Git冲突1"),
     ];
     
     for (conflict_type, title) in conflict_types {
@@ -125,7 +125,7 @@ async fn test_find_conflicts_by_type() {
     
     // 查找GitMergeConflict类型的冲突
     let git_conflicts = conflict_repo
-        .find_by_type(ConflictType::GitMergeConflict)
+        .find_by_type(ConflictType::GitMerge)
         .await.unwrap();
     
     assert_eq!(git_conflicts.len(), 1);
@@ -313,7 +313,7 @@ async fn test_resolve_conflict() {
     let conflict_repo = ConflictRepository::new(db.clone());
     
     let conflict_data = CreateConflictData {
-        conflict_type: ConflictType::ResourceContention,
+        conflict_type: ConflictType::Resource,
         severity: ConflictSeverity::Medium,
         title: "可解决的冲突".to_string(),
         description: "通过重新分配资源可以解决的冲突".to_string(),
@@ -476,7 +476,7 @@ async fn test_conflict_pagination() {
     // 创建多个冲突
     for i in 0..15 {
         let conflict_data = CreateConflictData {
-            conflict_type: if i % 2 == 0 { ConflictType::TaskDependency } else { ConflictType::ResourceContention },
+            conflict_type: if i % 2 == 0 { ConflictType::TaskDependency } else { ConflictType::Resource },
             severity: match i % 3 {
                 0 => ConflictSeverity::Low,
                 1 => ConflictSeverity::Medium,
@@ -525,9 +525,9 @@ async fn test_conflict_pagination_with_filter() {
     let conflict_configs = vec![
         (ConflictType::TaskDependency, ConflictSeverity::High),
         (ConflictType::TaskDependency, ConflictSeverity::Medium),
-        (ConflictType::ResourceContention, ConflictSeverity::High),
+        (ConflictType::Resource, ConflictSeverity::High),
         (ConflictType::TaskDependency, ConflictSeverity::Low),
-        (ConflictType::GitMergeConflict, ConflictSeverity::High),
+        (ConflictType::GitMerge, ConflictSeverity::High),
         (ConflictType::TaskDependency, ConflictSeverity::High),
     ];
     
@@ -573,8 +573,8 @@ async fn test_conflict_statistics() {
     let conflict_configs = vec![
         (ConflictType::TaskDependency, ConflictSeverity::High),
         (ConflictType::TaskDependency, ConflictSeverity::Medium),
-        (ConflictType::ResourceContention, ConflictSeverity::High),
-        (ConflictType::GitMergeConflict, ConflictSeverity::Low),
+        (ConflictType::Resource, ConflictSeverity::High),
+        (ConflictType::GitMerge, ConflictSeverity::Low),
         (ConflictType::TaskDependency, ConflictSeverity::Critical),
     ];
     
@@ -623,8 +623,8 @@ async fn test_conflict_statistics() {
     
     // 验证按类型统计
     assert_eq!(stats.by_type.get(&ConflictType::TaskDependency.to_string()), Some(&3));
-    assert_eq!(stats.by_type.get(&ConflictType::ResourceContention.to_string()), Some(&1));
-    assert_eq!(stats.by_type.get(&ConflictType::GitMergeConflict.to_string()), Some(&1));
+    assert_eq!(stats.by_type.get(&ConflictType::Resource.to_string()), Some(&1));
+    assert_eq!(stats.by_type.get(&ConflictType::GitMerge.to_string()), Some(&1));
     
     // 验证按严重性统计
     assert_eq!(stats.by_severity.get(&ConflictSeverity::High.to_string()), Some(&2));
@@ -653,7 +653,7 @@ async fn test_find_affecting_task() {
     };
     
     let conflict_data2 = CreateConflictData {
-        conflict_type: ConflictType::ResourceContention,
+        conflict_type: ConflictType::Resource,
         severity: ConflictSeverity::Medium,
         title: "影响任务的冲突2".to_string(),
         description: "另一个影响task_123的冲突".to_string(),
@@ -664,7 +664,7 @@ async fn test_find_affecting_task() {
     
     // 创建不影响该任务的冲突
     let conflict_data3 = CreateConflictData {
-        conflict_type: ConflictType::GitMergeConflict,
+        conflict_type: ConflictType::GitMerge,
         severity: ConflictSeverity::Low,
         title: "不相关的冲突".to_string(),
         description: "不影响task_123的冲突".to_string(),
@@ -704,7 +704,7 @@ async fn test_find_affecting_agent() {
     
     // 创建影响特定Agent的冲突
     let conflict_data1 = CreateConflictData {
-        conflict_type: ConflictType::ResourceContention,
+        conflict_type: ConflictType::Resource,
         severity: ConflictSeverity::High,
         title: "影响Agent的冲突1".to_string(),
         description: "影响agent_123的冲突".to_string(),

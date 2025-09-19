@@ -74,3 +74,20 @@ pnpm run --filter=@sker/desktop build
 2. 运行现有测试 - 看哪些真的能通过
 3. 逐步补充 - 基于能工作的代码写测试
 4. 实际验证 - 每写一个测试都要跑一遍
+
+
+  ```bash
+  # 检查所有测试编译
+  cargo check --tests
+
+  # 运行所有测试
+  cargo test
+
+  # 检查代码格式和 lint
+  cargo fmt --check && cargo clippy -- -D warnings
+
+  测试开发规范
+
+  - 新测试文件必须能编译通过
+  - 使用 #[ignore] 标记未完成的测试
+  - 使用 todo!() 标记未实现的方法

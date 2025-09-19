@@ -21,6 +21,41 @@ pub struct CreateHumanDecisionData {
     pub follow_up_actions: serde_json::Value,
 }
 
+/// 决策路径分析结果
+#[derive(Debug, Clone)]
+pub struct DecisionPath {
+    pub total_decisions: u32,
+    pub decision_sequence: Vec<DecisionSequenceItem>,
+    pub average_time_between_decisions: i64, // 毫秒
+    pub final_decision_type: String,
+    pub is_resolved: bool,
+}
+
+/// 决策序列项
+#[derive(Debug, Clone)]
+pub struct DecisionSequenceItem {
+    pub decision_id: Uuid,
+    pub decision_type: String,
+    pub made_at: chrono::DateTime<chrono::Utc>,
+    pub user_id: Uuid,
+}
+
+/// 决策统计信息
+#[derive(Debug, Clone, Default)]
+pub struct DecisionStatistics {
+    pub total_decisions: u32,
+    pub decisions_by_type: std::collections::HashMap<String, u32>,
+    pub decisions_by_user: std::collections::HashMap<String, u32>,
+    pub approval_rate: f64,
+}
+
+/// 决策频率统计
+#[derive(Debug, Clone, Default)]
+pub struct DecisionFrequencyStats {
+    pub total_decisions: u32,
+    pub average_decisions_per_hour: f64,
+}
+
 impl HumanDecisionRepository {
     /// 创建新的人工决策仓储实例
     pub fn new(db: DatabaseConnection) -> Self {
@@ -110,8 +145,8 @@ impl HumanDecisionRepository {
             .map_err(DatabaseError::from)
     }
     
-    /// 更新决策元数据
-    pub async fn update_metadata(
+    /// 更新决策数据
+    pub async fn update_decision_data(
         &self,
         decision_id: Uuid,
         metadata: serde_json::Value,
@@ -136,6 +171,163 @@ impl HumanDecisionRepository {
             .await?;
         
         Ok(())
+    }
+
+    /// 分析冲突的决策路径
+    pub async fn analyze_decision_path(&self, conflict_id: Uuid) -> Result<DecisionPath> {
+        let decisions = human_decision::Entity::find()
+            .filter(human_decision::Column::ConflictId.eq(conflict_id))
+            .order_by_asc(human_decision::Column::CreatedAt)
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)?;
+
+        if decisions.is_empty() {
+            return Ok(DecisionPath {
+                total_decisions: 0,
+                decision_sequence: vec![],
+                average_time_between_decisions: 0,
+                final_decision_type: String::new(),
+                is_resolved: false,
+            });
+        }
+
+        let mut decision_sequence = Vec::new();
+        let mut time_diffs = Vec::new();
+
+        for (i, decision) in decisions.iter().enumerate() {
+            decision_sequence.push(DecisionSequenceItem {
+                decision_id: decision.decision_id,
+                decision_type: decision.decision_type.clone(),
+                made_at: decision.created_at.into(),
+                user_id: decision.user_id,
+            });
+
+            if i > 0 {
+                let prev_time: chrono::DateTime<chrono::Utc> = decisions[i - 1].created_at.into();
+                let curr_time: chrono::DateTime<chrono::Utc> = decision.created_at.into();
+                let diff = curr_time.timestamp_millis() - prev_time.timestamp_millis();
+                time_diffs.push(diff);
+            }
+        }
+
+        let average_time = if time_diffs.is_empty() {
+            0
+        } else {
+            time_diffs.iter().sum::<i64>() / time_diffs.len() as i64
+        };
+
+        let final_decision = decisions.last().unwrap();
+        let is_resolved = matches!(final_decision.decision_type.as_str(), 
+            "approve" | "reject" | "resolve" | "close");
+
+        Ok(DecisionPath {
+            total_decisions: decisions.len() as u32,
+            decision_sequence,
+            average_time_between_decisions: average_time,
+            final_decision_type: final_decision.decision_type.clone(),
+            is_resolved,
+        })
+    }
+
+    /// 添加后续行动
+    pub async fn add_follow_up_actions(
+        &self,
+        decision_id: Uuid,
+        additional_actions: serde_json::Value,
+    ) -> Result<human_decision::Model> {
+        let decision = human_decision::Entity::find_by_id(decision_id)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| DatabaseError::entity_not_found("HumanDecision", decision_id))?;
+        
+        // 合并现有的和新的后续行动
+        let mut existing_actions = decision.follow_up_actions.clone();
+        if let (Some(existing_array), Some(additional_array)) = 
+            (existing_actions.as_array_mut(), additional_actions.as_array()) {
+            existing_array.extend_from_slice(additional_array);
+        }
+
+        let mut decision: human_decision::ActiveModel = decision.into();
+        decision.follow_up_actions = Set(existing_actions);
+        
+        decision.update(&self.db)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
+    /// 获取决策统计信息
+    pub async fn get_decision_statistics(&self) -> Result<DecisionStatistics> {
+        let decisions = human_decision::Entity::find()
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)?;
+
+        let mut stats = DecisionStatistics::default();
+        stats.total_decisions = decisions.len() as u32;
+
+        let mut approval_count = 0;
+
+        for decision in decisions {
+            // 按类型统计
+            let type_entry = stats.decisions_by_type
+                .entry(decision.decision_type.clone())
+                .or_insert(0);
+            *type_entry += 1;
+
+            // 按用户统计
+            let user_entry = stats.decisions_by_user
+                .entry(decision.user_id.to_string())
+                .or_insert(0);
+            *user_entry += 1;
+
+            // 统计批准率
+            if decision.decision_type == "approve" {
+                approval_count += 1;
+            }
+        }
+
+        // 计算批准率
+        stats.approval_rate = if stats.total_decisions > 0 {
+            approval_count as f64 / stats.total_decisions as f64
+        } else {
+            0.0
+        };
+
+        Ok(stats)
+    }
+
+    /// 根据时间范围查找决策
+    pub async fn find_decisions_in_time_range(
+        &self,
+        start_time: chrono::DateTime<chrono::Utc>,
+        end_time: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<human_decision::Model>> {
+        human_decision::Entity::find()
+            .filter(human_decision::Column::CreatedAt.gte(start_time))
+            .filter(human_decision::Column::CreatedAt.lte(end_time))
+            .order_by_desc(human_decision::Column::CreatedAt)
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
+    /// 获取每小时决策频率统计
+    pub async fn get_decision_frequency_by_hour(&self) -> Result<DecisionFrequencyStats> {
+        let decisions = human_decision::Entity::find()
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)?;
+
+        let mut stats = DecisionFrequencyStats::default();
+        stats.total_decisions = decisions.len() as u32;
+
+        if !decisions.is_empty() {
+            // 计算平均每小时决策数（简化实现）
+            stats.average_decisions_per_hour = stats.total_decisions as f64;
+        }
+
+        Ok(stats)
     }
 }
 

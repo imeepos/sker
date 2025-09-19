@@ -1,7 +1,7 @@
 //! 执行日志仓储实现
 
 use crate::{entities::execution_log, DatabaseConnection, DatabaseError, Result};
-use sea_orm::{EntityTrait, Set, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait, Set, ColumnTrait, QueryFilter, QueryOrder, PaginatorTrait};
 use uuid::Uuid;
 
 /// 执行日志仓储
@@ -18,6 +18,17 @@ pub struct CreateExecutionLogData {
     pub message: String,
     pub details: Option<serde_json::Value>,
     pub timestamp_ms: i64,
+}
+
+/// 日志统计信息
+#[derive(Debug, Clone, Default)]
+pub struct LogStatistics {
+    pub total_logs: u32,
+    pub debug_count: u32,
+    pub info_count: u32,
+    pub warn_count: u32,
+    pub error_count: u32,
+    pub error_rate: f64,
 }
 
 impl ExecutionLogRepository {
@@ -131,6 +142,159 @@ impl ExecutionLogRepository {
             .await?;
         
         Ok(())
+    }
+
+    /// 获取日志统计信息
+    pub async fn get_log_statistics(&self, session_id: Uuid) -> Result<LogStatistics> {
+        let logs = execution_log::Entity::find()
+            .filter(execution_log::Column::SessionId.eq(session_id))
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)?;
+
+        let mut stats = LogStatistics::default();
+        stats.total_logs = logs.len() as u32;
+
+        for log in logs {
+            match log.log_level.as_str() {
+                "debug" => stats.debug_count += 1,
+                "info" => stats.info_count += 1,
+                "warn" => stats.warn_count += 1,
+                "error" => stats.error_count += 1,
+                _ => {}
+            }
+        }
+
+        // 计算错误率
+        stats.error_rate = if stats.total_logs > 0 {
+            stats.error_count as f64 / stats.total_logs as f64
+        } else {
+            0.0
+        };
+
+        Ok(stats)
+    }
+
+    /// 根据详情内容查找日志
+    pub async fn find_logs_by_details_content(
+        &self,
+        session_id: Uuid,
+        key: &str,
+        value: &str,
+    ) -> Result<Vec<execution_log::Model>> {
+        let logs = execution_log::Entity::find()
+            .filter(execution_log::Column::SessionId.eq(session_id))
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)?;
+
+        // 过滤包含指定键值对的日志
+        let filtered_logs = logs
+            .into_iter()
+            .filter(|log| {
+                if let Some(details) = &log.details {
+                    if let Some(obj) = details.as_object() {
+                        return obj.get(key)
+                            .and_then(|v| v.as_str())
+                            .map(|s| s == value)
+                            .unwrap_or(false);
+                    }
+                }
+                false
+            })
+            .collect();
+
+        Ok(filtered_logs)
+    }
+
+    /// 根据多个过滤条件查找日志
+    pub async fn find_logs_with_filters(
+        &self,
+        session_id: Uuid,
+        log_level: Option<String>,
+        event_type: Option<String>,
+        start_time: Option<chrono::DateTime<chrono::Utc>>,
+        end_time: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Vec<execution_log::Model>> {
+        let mut query = execution_log::Entity::find()
+            .filter(execution_log::Column::SessionId.eq(session_id));
+
+        if let Some(level) = log_level {
+            query = query.filter(execution_log::Column::LogLevel.eq(level));
+        }
+
+        if let Some(event) = event_type {
+            query = query.filter(execution_log::Column::EventType.eq(event));
+        }
+
+        if let Some(start) = start_time {
+            query = query.filter(execution_log::Column::CreatedAt.gte(start));
+        }
+
+        if let Some(end) = end_time {
+            query = query.filter(execution_log::Column::CreatedAt.lte(end));
+        }
+
+        query
+            .order_by_asc(execution_log::Column::CreatedAt)
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
+    /// 根据时间范围查找日志
+    pub async fn find_logs_by_time_range(
+        &self,
+        session_id: Uuid,
+        start_timestamp_ms: i64,
+        end_timestamp_ms: i64,
+    ) -> Result<Vec<execution_log::Model>> {
+        execution_log::Entity::find()
+            .filter(execution_log::Column::SessionId.eq(session_id))
+            .filter(execution_log::Column::TimestampMs.gte(start_timestamp_ms))
+            .filter(execution_log::Column::TimestampMs.lte(end_timestamp_ms))
+            .order_by_asc(execution_log::Column::TimestampMs)
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
+    /// 分页查找日志
+    pub async fn find_logs_with_pagination(
+        &self,
+        session_id: Uuid,
+        page: u64,
+        page_size: u64,
+    ) -> Result<(Vec<execution_log::Model>, u64)> {
+        // 获取总数
+        let total_count = execution_log::Entity::find()
+            .filter(execution_log::Column::SessionId.eq(session_id))
+            .count(&self.db)
+            .await
+            .map_err(DatabaseError::from)?;
+
+        let total_pages = (total_count + page_size - 1) / page_size;
+
+        // 获取分页数据
+        let logs = execution_log::Entity::find()
+            .filter(execution_log::Column::SessionId.eq(session_id))
+            .order_by_desc(execution_log::Column::CreatedAt)
+            .paginate(&self.db, page_size)
+            .fetch_page(page)
+            .await
+            .map_err(DatabaseError::from)?;
+
+        Ok((logs, total_pages))
+    }
+
+    /// 根据事件类型查找日志
+    pub async fn find_by_event_type(&self, event_type: &str) -> Result<Vec<execution_log::Model>> {
+        execution_log::Entity::find()
+            .filter(execution_log::Column::EventType.eq(event_type))
+            .order_by_desc(execution_log::Column::CreatedAt)
+            .all(&self.db)
+            .await
+            .map_err(DatabaseError::from)
     }
 }
 

@@ -259,12 +259,15 @@ mod tests {
         let review_data = CreateCodeReviewData {
             task_id,
             execution_session_id: Uuid::new_v4(),
-            reviewer_agent_id: None,
-            review_type: "manual".to_string(),
+            reviewer_agent_id: Uuid::new_v4(),
+            pull_request_url: "https://github.com/owner/repo/pull/456".to_string(),
+            source_branch: "feature/bug-fix".to_string(),
+            target_branch: "develop".to_string(),
+            review_comments: serde_json::json!({"comments": []}),
+            code_changes: serde_json::json!({"changes": []}),
             status: "pending".to_string(),
-            review_comments: None,
-            code_changes: None,
-            quality_score: None,
+            decision: None,
+            overall_comment: None,
         };
         
         let _created_review = repo.create(review_data).await.unwrap();
@@ -282,12 +285,15 @@ mod tests {
         let review_data = CreateCodeReviewData {
             task_id: Uuid::new_v4(),
             execution_session_id: Uuid::new_v4(),
-            reviewer_agent_id: Some(Uuid::new_v4()),
-            review_type: "automated".to_string(),
+            reviewer_agent_id: Uuid::new_v4(),
+            pull_request_url: "https://github.com/owner/repo/pull/789".to_string(),
+            source_branch: "hotfix/critical-bug".to_string(),
+            target_branch: "main".to_string(),
+            review_comments: serde_json::json!({"initial": "starting review"}),
+            code_changes: serde_json::json!({"files": ["src/main.rs"]}),
             status: "in_progress".to_string(),
-            review_comments: None,
-            code_changes: None,
-            quality_score: None,
+            decision: None,
+            overall_comment: None,
         };
         
         let created_review = repo.create(review_data).await.unwrap();
@@ -305,7 +311,7 @@ mod tests {
         ).await.unwrap();
         
         assert_eq!(completed_review.status, "approved");
-        assert_eq!(completed_review.quality_score, Some(9.0));
-        assert!(completed_review.completed_at.is_some());
+        assert_eq!(completed_review.decision, Some("approved".to_string()));
+        assert!(completed_review.reviewed_at.is_some());
     }
 }

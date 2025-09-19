@@ -22,8 +22,8 @@ mod common;
 async fn create_test_user(db: &codex_database::DatabaseConnection) -> Uuid {
     let repo = UserRepository::new(db.clone());
     let user_data = CreateUserData {
-        username: format!("test_user_{}", Uuid::new_v4().to_string()[..8]),
-        email: format!("test_{}@example.com", Uuid::new_v4().to_string()[..8]),
+        username: format!("test_user_{}", &Uuid::new_v4().to_string()[..8]),
+        email: format!("test_{}@example.com", &Uuid::new_v4().to_string()[..8]),
         password_hash: "password_hash".to_string(),
         profile_data: None,
         settings: None,
@@ -404,8 +404,8 @@ async fn test_decision_statistics() {
     assert_eq!(stats.decisions_by_type.get(&DecisionType::Modify.to_string()), Some(&1));
     assert_eq!(stats.decisions_by_type.get(&DecisionType::Escalate.to_string()), Some(&1));
     
-    assert_eq!(stats.decisions_by_user.get(&user1_id), Some(&4));
-    assert_eq!(stats.decisions_by_user.get(&user2_id), Some(&2));
+    assert_eq!(stats.decisions_by_user.get(&user1_id.to_string()), Some(&4));
+    assert_eq!(stats.decisions_by_user.get(&user2_id.to_string()), Some(&2));
     
     // 验证批准率
     let expected_approval_rate = 3.0 / 6.0;
@@ -447,8 +447,8 @@ async fn test_decision_time_analysis() {
     
     let recent_decisions = decision_repo
         .find_decisions_in_time_range(
-            one_hour_ago.timestamp_millis(),
-            now.timestamp_millis(),
+            one_hour_ago,
+            now,
         )
         .await.unwrap();
     
@@ -461,10 +461,7 @@ async fn test_decision_time_analysis() {
     
     // 获取决策频率分析
     let frequency_stats = decision_repo
-        .get_decision_frequency_by_hour(
-            one_hour_ago.timestamp_millis(),
-            now.timestamp_millis(),
-        )
+        .get_decision_frequency_by_hour()
         .await.unwrap();
     
     assert!(frequency_stats.total_decisions >= 5);
