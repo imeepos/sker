@@ -8,7 +8,6 @@ use codex_protocol::mcp_protocol::ConversationId;
 use codex_database::{
     DatabaseConnection, 
     repository::project_repository::{ProjectRepository, CreateProjectData},
-    repository::user_repository::{UserRepository, CreateUserData},
     DatabaseConfig,
     initialize_database,
 };
@@ -553,35 +552,21 @@ pub async fn remove_conversation_listener(
 #[tauri::command]
 pub async fn create_project(
     request: CreateProjectRequest,
+    token: String,
     db: State<'_, DatabaseHandle>,
 ) -> Result<crate::models::Project, String> {
-    println!("创建新项目: {}", request.name);
+    // 验证token并获取当前用户
+    let auth_service = crate::auth::AuthService::new((**db).clone());
+    let current_user = auth_service.validate_token(&token).await
+        .map_err(|e| format!("身份验证失败: {}", e))?;
+    
+    println!("创建新项目: {} (用户: {})", request.name, current_user.username);
     
     let db = &**db;
     let project_repo = ProjectRepository::new(db.clone());
     
-    // 创建默认用户（临时方案，实际应该从认证系统获取）
-    let user_id = Uuid::new_v4();
-    let user_repo = UserRepository::new(db.clone());
-    
-    // 检查用户是否存在，不存在则创建
-    let existing_user = user_repo.find_by_id(user_id).await
-        .map_err(|e| format!("查询用户失败: {}", e))?;
-    
-    if existing_user.is_none() {
-        let user_data = CreateUserData {
-            username: "default_user".to_string(),
-            email: "user@example.com".to_string(),
-            password_hash: "placeholder_hash".to_string(),
-            profile_data: None,
-            settings: None,
-        };
-        
-        user_repo.create(user_data).await
-            .map_err(|e| format!("创建用户失败: {}", e))?;
-        
-        println!("创建了默认用户: {}", user_id);
-    }
+    // 使用当前登录用户的ID
+    let user_id = current_user.user_id;
     
     // 创建项目
     let project_data = CreateProjectData {
@@ -619,25 +604,24 @@ pub async fn create_project(
 /// 获取项目列表
 #[tauri::command]
 pub async fn get_projects(
+    token: String,
     db: State<'_, DatabaseHandle>,
 ) -> Result<Vec<crate::models::Project>, String> {
-    println!("获取项目列表");
+    // 验证token并获取当前用户
+    let auth_service = crate::auth::AuthService::new((**db).clone());
+    let current_user = auth_service.validate_token(&token).await
+        .map_err(|e| format!("身份验证失败: {}", e))?;
+    
+    println!("获取用户 {} 的项目列表", current_user.username);
     
     let db = &**db;
-    let _project_repo = ProjectRepository::new(db.clone());
+    let project_repo = ProjectRepository::new(db.clone());
     
-    // 目前简化实现：获取第一个用户的所有项目
-    // 实际应该从认证系统获取当前用户ID
-    let _user_repo = UserRepository::new(db.clone());
+    // 获取当前用户的所有项目
+    let projects = project_repo.find_by_user(current_user.user_id).await
+        .map_err(|e| format!("查询项目失败: {}", e))?;
     
-    // 获取所有用户，取第一个用户的项目（临时方案）
-    // TODO: 实现正确的用户认证和项目查询
-    let _dummy_user_id = Uuid::new_v4(); // 这里应该是真实的用户ID
-    
-    // 暂时返回空列表，等实现用户系统后再完善
-    let projects = Vec::new();
-    
-    let result: Vec<crate::models::Project> = projects.into_iter().map(|p: codex_database::entities::project::Model| {
+    let result: Vec<crate::models::Project> = projects.into_iter().map(|p| {
         crate::models::Project {
             project_id: p.project_id.to_string(),
             user_id: p.user_id.to_string(),

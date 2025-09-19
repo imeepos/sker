@@ -35,6 +35,17 @@ export interface UpdateProjectRequest {
 }
 
 /**
+ * 获取当前的认证token
+ */
+function getAuthToken(): string {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    throw new Error('未登录或登录已过期，请重新登录');
+  }
+  return token;
+}
+
+/**
  * 项目管理服务
  */
 export class ProjectService {
@@ -43,7 +54,8 @@ export class ProjectService {
    */
   async createProject(request: CreateProjectRequest): Promise<Project> {
     try {
-      const project = await invoke<Project>('create_project', { request })
+      const token = getAuthToken();
+      const project = await invoke<Project>('create_project', { request, token })
       console.log('项目创建成功:', project)
       return project
     } catch (error) {
@@ -57,7 +69,8 @@ export class ProjectService {
    */
   async getProjects(): Promise<Project[]> {
     try {
-      const projects = await invoke<Project[]>('get_projects')
+      const token = getAuthToken();
+      const projects = await invoke<Project[]>('get_projects', { token })
       console.log('获取项目列表成功:', projects.length)
       return projects
     } catch (error) {
