@@ -601,7 +601,7 @@ async fn test_multi_aggregate_event_streams() {
     ];
     
     // 创建所有事件
-    for (i, (aggregate_type, aggregate_id, event_type, event_data)) in multi_aggregate_events.iter().enumerate() {
+    for (_i, (aggregate_type, aggregate_id, event_type, event_data)) in multi_aggregate_events.iter().enumerate() {
         let data = CreateDomainEventData {
             aggregate_type: aggregate_type.to_string(),
             aggregate_id: *aggregate_id,

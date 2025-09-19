@@ -647,6 +647,7 @@ mod test_helpers {
     use super::*;
     
     /// 创建测试用的Agent配置
+    #[allow(dead_code)]
     pub fn create_test_agent_config(name: &str) -> agent_management::AgentConfig {
         agent_management::AgentConfig {
             name: name.to_string(),
@@ -664,6 +665,7 @@ mod test_helpers {
     }
     
     /// 创建测试用的项目信息
+    #[allow(dead_code)]
     pub fn create_test_project_info(name: &str) -> project_management::ProjectInfo {
         project_management::ProjectInfo {
             name: name.to_string(),
@@ -686,6 +688,7 @@ mod test_helpers {
     }
     
     /// 创建测试用的任务信息
+    #[allow(dead_code)]
     pub fn create_test_task_info(title: &str) -> llm_orchestration::TaskInfo {
         llm_orchestration::TaskInfo {
             task_id: TaskId::new(),

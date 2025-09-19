@@ -5,8 +5,7 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::json;
 
 use codex_database::entities::agent_performance_metrics::{
-    Entity as AgentPerformanceMetrics, Model as AgentPerformanceMetricsModel, 
-    ActiveModel as AgentPerformanceMetricsActiveModel
+    Model as AgentPerformanceMetricsModel,
 };
 
 /// 测试AgentPerformanceMetrics实体的创建

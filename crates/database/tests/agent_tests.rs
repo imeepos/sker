@@ -1,10 +1,9 @@
 //! Agent实体和功能单元测试
 
-use codex_database::entities::agent::{self, Entity as Agent, ActiveModel, Model};
-use codex_database::entities::user::{self, Entity as User};
-use codex_database::entities::agent::{AgentCapability, AgentStatus};
+use codex_database::entities::agent::{self, ActiveModel, AgentStatus};
+use codex_database::entities::user;
 use codex_database::{initialize_database, DatabaseConfig};
-use sea_orm::{ActiveValue::Set, EntityTrait, ActiveModelTrait};
+use sea_orm::{ActiveValue::Set, ActiveModelTrait};
 use serde_json::json;
 use tempfile::tempdir;
 use uuid::Uuid;

@@ -1,12 +1,12 @@
 //! 冲突处理实体单元测试
 
 use codex_database::entities::{
-    conflict::{self, Entity as Conflict, ActiveModel, ConflictType, ConflictSeverity, ConflictStatus},
-    human_decision::{self, Entity as HumanDecision, DecisionType},
-    user::{self, Entity as User},
+    conflict::{self, ConflictType, ConflictSeverity, ConflictStatus},
+    human_decision::{self, DecisionType},
+    user::{self},
 };
 use codex_database::{initialize_database, DatabaseConfig};
-use sea_orm::{ActiveValue::Set, EntityTrait, ActiveModelTrait};
+use sea_orm::{ActiveValue::Set, ActiveModelTrait};
 use serde_json::json;
 use tempfile::tempdir;
 use uuid::Uuid;
@@ -50,7 +50,7 @@ async fn create_test_user(db: &codex_database::DatabaseConnection) -> user::Mode
 #[tokio::test]
 async fn test_conflict_creation() {
     let db = create_test_db().await;
-    let user = create_test_user(&db).await;
+    let _user = create_test_user(&db).await;
     
     // 创建Git合并冲突
     let conflict_id = Uuid::new_v4();
@@ -103,7 +103,7 @@ async fn test_conflict_creation() {
 #[tokio::test]
 async fn test_conflict_escalation() {
     let db = create_test_db().await;
-    let user = create_test_user(&db).await;
+    let _user = create_test_user(&db).await;
     
     // 创建资源冲突
     let conflict = conflict::ActiveModel {
@@ -145,7 +145,7 @@ async fn test_conflict_escalation() {
 #[tokio::test]
 async fn test_conflict_resolution() {
     let db = create_test_db().await;
-    let user = create_test_user(&db).await;
+    let _user = create_test_user(&db).await;
     
     // 创建任务依赖冲突
     let conflict = conflict::ActiveModel {
@@ -190,7 +190,7 @@ async fn test_conflict_resolution() {
 #[tokio::test]
 async fn test_human_decision_creation() {
     let db = create_test_db().await;
-    let user = create_test_user(&db).await;
+    let _user = create_test_user(&db).await;
     
     // 创建冲突
     let conflict = conflict::ActiveModel {
@@ -345,7 +345,7 @@ async fn test_conflict_enum_conversions() {
 #[tokio::test]
 async fn test_complex_conflict_scenario() {
     let db = create_test_db().await;
-    let user = create_test_user(&db).await;
+    let _user = create_test_user(&db).await;
     
     // 创建复杂的多类型冲突
     let complex_entities = json!([

@@ -5,10 +5,8 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::json;
 
 use codex_database::entities::code_review::{
-    Entity as CodeReview, Model as CodeReviewModel, ActiveModel as CodeReviewActiveModel,
-    ReviewStatus, ReviewDecision, ReviewComment, CodeChange, DependencyType
+    Model as CodeReviewModel, ReviewStatus, ReviewDecision, ReviewComment, CodeChange
 };
-use codex_database::entities::code_review::*;
 
 /// 测试CodeReview实体的创建
 #[tokio::test]
