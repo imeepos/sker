@@ -2,8 +2,8 @@
 
 use crate::common::setup_test_db;
 use codex_database::{
-    repository::{ProjectRepository, RequirementDocumentRepository, UserRepository},
     repository::{
+        ProjectRepository, RequirementDocumentRepository, UserRepository,
         user_repository::CreateUserData,
         project_repository::CreateProjectData,
         requirement_document_repository::CreateRequirementDocumentData,
@@ -58,13 +58,14 @@ async fn test_find_project_by_id() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let created_project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "查找测试项目".to_string(),
-        None,
-        "https://github.com/test/find.git".to_string(),
-        "/workspace/find".to_string(),
-    )
+        name: "查找测试项目".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/find.git".to_string(),
+        workspace_path: "/workspace/find".to_string(),
+    };
+    let created_project = project_repo.create(project_data)
     .await
     .unwrap();
 
@@ -85,23 +86,25 @@ async fn test_find_projects_by_user() {
     let project_repo = ProjectRepository::new(db.clone());
     
     // 创建两个项目
-    let _project1 = project_repo.create(
+    let project1_data = CreateProjectData {
         user_id,
-        "用户项目1".to_string(),
-        None,
-        "https://github.com/test/proj1.git".to_string(),
-        "/workspace/proj1".to_string(),
-    )
+        name: "用户项目1".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/proj1.git".to_string(),
+        workspace_path: "/workspace/proj1".to_string(),
+    };
+    let _project1 = project_repo.create(project1_data)
     .await
     .unwrap();
 
-    let _project2 = project_repo.create(
+    let project2_data = CreateProjectData {
         user_id,
-        "用户项目2".to_string(),
-        None,
-        "https://github.com/test/proj2.git".to_string(),
-        "/workspace/proj2".to_string(),
-    )
+        name: "用户项目2".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/proj2.git".to_string(),
+        workspace_path: "/workspace/proj2".to_string(),
+    };
+    let _project2 = project_repo.create(project2_data)
     .await
     .unwrap();
 
@@ -120,13 +123,14 @@ async fn test_update_project_config() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "配置测试项目".to_string(),
-        None,
-        "https://github.com/test/config.git".to_string(),
-        "/workspace/config".to_string(),
-    )
+        name: "配置测试项目".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/config.git".to_string(),
+        workspace_path: "/workspace/config".to_string(),
+    };
+    let project = project_repo.create(project_data)
     .await
     .unwrap();
 
@@ -155,13 +159,14 @@ async fn test_update_project_status() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "状态测试项目".to_string(),
-        None,
-        "https://github.com/test/status.git".to_string(),
-        "/workspace/status".to_string(),
-    )
+        name: "状态测试项目".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/status.git".to_string(),
+        workspace_path: "/workspace/status".to_string(),
+    };
+    let project = project_repo.create(project_data)
     .await
     .unwrap();
 
@@ -178,13 +183,14 @@ async fn test_delete_project() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "删除测试项目".to_string(),
-        None,
-        "https://github.com/test/delete.git".to_string(),
-        "/workspace/delete".to_string(),
-    )
+        name: "删除测试项目".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/delete.git".to_string(),
+        workspace_path: "/workspace/delete".to_string(),
+    };
+    let project = project_repo.create(project_data)
     .await
     .unwrap();
 
@@ -205,23 +211,25 @@ async fn test_create_requirement_document() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "需求文档测试项目".to_string(),
-        None,
-        "https://github.com/test/docs.git".to_string(),
-        "/workspace/docs".to_string(),
-    )
+        name: "需求文档测试项目".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/docs.git".to_string(),
+        workspace_path: "/workspace/docs".to_string(),
+    };
+    let project = project_repo.create(project_data)
     .await
     .unwrap();
 
     let doc_repo = RequirementDocumentRepository::new(db.clone());
-    let document = doc_repo.create(
-        project.project_id,
-        "用户登录需求".to_string(),
-        "用户应该能够通过邮箱和密码登录系统".to_string(),
-        "user_story".to_string(),
-    )
+    let document_data = CreateRequirementDocumentData {
+        project_id: project.project_id,
+        title: "用户登录需求".to_string(),
+        content: "用户应该能够通过邮箱和密码登录系统".to_string(),
+        document_type: "user_story".to_string(),
+    };
+    let document = doc_repo.create(document_data)
     .await
     .unwrap();
 
@@ -237,33 +245,36 @@ async fn test_find_documents_by_project() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "文档查找测试".to_string(),
-        None,
-        "https://github.com/test/find-docs.git".to_string(),
-        "/workspace/find-docs".to_string(),
-    )
+        name: "文档查找测试".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/find-docs.git".to_string(),
+        workspace_path: "/workspace/find-docs".to_string(),
+    };
+    let project = project_repo.create(project_data)
     .await
     .unwrap();
 
     let doc_repo = RequirementDocumentRepository::new(db.clone());
     // 创建多个文档
-    let _doc1 = doc_repo.create(
-        project.project_id,
-        "需求1".to_string(),
-        "需求1内容".to_string(),
-        "user_story".to_string(),
-    )
+    let doc1_data = CreateRequirementDocumentData {
+        project_id: project.project_id,
+        title: "需求1".to_string(),
+        content: "需求1内容".to_string(),
+        document_type: "user_story".to_string(),
+    };
+    let _doc1 = doc_repo.create(doc1_data)
     .await
     .unwrap();
 
-    let _doc2 = doc_repo.create(
-        project.project_id,
-        "需求2".to_string(),
-        "需求2内容".to_string(),
-        "technical_spec".to_string(),
-    )
+    let doc2_data = CreateRequirementDocumentData {
+        project_id: project.project_id,
+        title: "需求2".to_string(),
+        content: "需求2内容".to_string(),
+        document_type: "technical_spec".to_string(),
+    };
+    let _doc2 = doc_repo.create(doc2_data)
     .await
     .unwrap();
 
@@ -282,23 +293,25 @@ async fn test_update_document_llm_processing() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "LLM处理测试".to_string(),
-        None,
-        "https://github.com/test/llm.git".to_string(),
-        "/workspace/llm".to_string(),
-    )
+        name: "LLM处理测试".to_string(),
+        description: None,
+        repository_url: "https://github.com/test/llm.git".to_string(),
+        workspace_path: "/workspace/llm".to_string(),
+    };
+    let project = project_repo.create(project_data)
     .await
     .unwrap();
 
     let doc_repo = RequirementDocumentRepository::new(db.clone());
-    let document = doc_repo.create(
-        project.project_id,
-        "待处理需求".to_string(),
-        "这个需求需要LLM处理".to_string(),
-        "user_story".to_string(),
-    )
+    let document_data = CreateRequirementDocumentData {
+        project_id: project.project_id,
+        title: "待处理需求".to_string(),
+        content: "这个需求需要LLM处理".to_string(),
+        document_type: "user_story".to_string(),
+    };
+    let document = doc_repo.create(document_data)
     .await
     .unwrap();
 

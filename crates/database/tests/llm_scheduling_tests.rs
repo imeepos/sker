@@ -2,7 +2,14 @@
 
 use crate::common::setup_test_db;
 use codex_database::{
-    repository::{LlmSessionRepository, LlmConversationRepository, TaskRepository, UserRepository, ProjectRepository},
+    repository::{
+        LlmSessionRepository, LlmConversationRepository, TaskRepository, 
+        UserRepository, ProjectRepository,
+        llm_session_repository::CreateLlmSessionData,
+        llm_conversation_repository::CreateConversationMessageData,
+        task_repository::CreateTaskData,
+        project_repository::CreateProjectData,
+    },
     repository::user_repository::CreateUserData,
 };
 use serde_json::json;
@@ -27,15 +34,16 @@ async fn create_test_user(db: &codex_database::DatabaseConnection) -> uuid::Uuid
 /// 创建测试项目的辅助函数
 async fn create_test_project(db: &codex_database::DatabaseConnection, user_id: Uuid) -> uuid::Uuid {
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        format!("test_project_{}", Uuid::new_v4().to_string()[..8].to_string()),
-        Some("测试项目描述".to_string()),
-        "https://github.com/test/repo.git".to_string(),
-        "/workspace/test".to_string(),
-    )
-    .await
-    .unwrap();
+        name: format!("test_project_{}", Uuid::new_v4().to_string()[..8].to_string()),
+        description: Some("测试项目描述".to_string()),
+        repository_url: "https://github.com/test/repo.git".to_string(),
+        workspace_path: "/workspace/test".to_string(),
+    };
+    let project = project_repo.create(project_data)
+        .await
+        .unwrap();
     project.project_id
 }
 
@@ -47,13 +55,14 @@ async fn test_create_llm_session() {
     let project_id = create_test_project(&db, user_id).await;
 
     let session_repo = LlmSessionRepository::new(db.clone());
-    let session = session_repo.create(
+    let session_data = CreateLlmSessionData {
         project_id,
         user_id,
-        "requirement_decomposition".to_string(),
-        Some("你是一个需求分析专家".to_string()),
-        Some("请分解以下需求".to_string()),
-    )
+        session_type: "requirement_decomposition".to_string(),
+        system_prompt: Some("你是一个需求分析专家".to_string()),
+        decomposition_prompt: Some("请分解以下需求".to_string()),
+    };
+    let session = session_repo.create(session_data)
     .await
     .expect("创建LLM会话应该成功");
 
@@ -73,23 +82,25 @@ async fn test_find_session_by_project() {
     let project_id = create_test_project(&db, user_id).await;
 
     let session_repo = LlmSessionRepository::new(db.clone());
-    let _session1 = session_repo.create(
+    let session1_data = CreateLlmSessionData {
         project_id,
         user_id,
-        "requirement_decomposition".to_string(),
-        None,
-        None,
-    )
+        session_type: "requirement_decomposition".to_string(),
+        system_prompt: None,
+        decomposition_prompt: None,
+    };
+    let _session1 = session_repo.create(session1_data)
     .await
     .unwrap();
 
-    let _session2 = session_repo.create(
+    let session2_data = CreateLlmSessionData {
         project_id,
         user_id,
-        "task_allocation".to_string(),
-        None,
-        None,
-    )
+        session_type: "task_allocation".to_string(),
+        system_prompt: None,
+        decomposition_prompt: None,
+    };
+    let _session2 = session_repo.create(session2_data)
     .await
     .unwrap();
 
@@ -110,15 +121,16 @@ async fn test_update_session_result() {
     let project_id = create_test_project(&db, user_id).await;
 
     let session_repo = LlmSessionRepository::new(db.clone());
-    let session = session_repo.create(
+    let session_data = CreateLlmSessionData {
         project_id,
         user_id,
-        "requirement_decomposition".to_string(),
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+        session_type: "requirement_decomposition".to_string(),
+        system_prompt: None,
+        decomposition_prompt: None,
+    };
+    let session = session_repo.create(session_data)
+        .await
+        .unwrap();
 
     let result_data = json!({
         "tasks": [
@@ -148,23 +160,28 @@ async fn test_create_conversation_message() {
     let project_id = create_test_project(&db, user_id).await;
 
     let session_repo = LlmSessionRepository::new(db.clone());
-    let session = session_repo.create(
+    let session_data = CreateLlmSessionData {
         project_id,
         user_id,
-        "requirement_decomposition".to_string(),
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+        session_type: "requirement_decomposition".to_string(),
+        system_prompt: None,
+        decomposition_prompt: None,
+    };
+    let session = session_repo.create(session_data)
+        .await
+        .unwrap();
 
     let conv_repo = LlmConversationRepository::new(db.clone());
-    let message = conv_repo.create_message(
-        session.session_id,
-        "user".to_string(),
-        "请帮我分解这个需求".to_string(),
-        1,
-    )
+    let message_data = CreateConversationMessageData {
+        session_id: session.session_id,
+        role: "user".to_string(),
+        content: "请帮我分解这个需求".to_string(),
+        message_order: 1,
+        token_count: None,
+        model_used: None,
+        processing_time_ms: None,
+    };
+    let message = conv_repo.create(message_data)
     .await
     .unwrap();
 
@@ -182,33 +199,42 @@ async fn test_find_conversation_by_session() {
     let project_id = create_test_project(&db, user_id).await;
 
     let session_repo = LlmSessionRepository::new(db.clone());
-    let session = session_repo.create(
+    let session_data = CreateLlmSessionData {
         project_id,
         user_id,
-        "requirement_decomposition".to_string(),
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+        session_type: "requirement_decomposition".to_string(),
+        system_prompt: None,
+        decomposition_prompt: None,
+    };
+    let session = session_repo.create(session_data)
+        .await
+        .unwrap();
 
     // 创建对话消息
     let conv_repo = LlmConversationRepository::new(db.clone());
-    let _msg1 = conv_repo.create_message(
-        session.session_id,
-        "user".to_string(),
-        "用户消息".to_string(),
-        1,
-    )
+    let msg1_data = CreateConversationMessageData {
+        session_id: session.session_id,
+        role: "user".to_string(),
+        content: "用户消息".to_string(),
+        message_order: 1,
+        token_count: None,
+        model_used: None,
+        processing_time_ms: None,
+    };
+    let _msg1 = conv_repo.create(msg1_data)
     .await
     .unwrap();
 
-    let _msg2 = conv_repo.create_message(
-        session.session_id,
-        "assistant".to_string(),
-        "助手回复".to_string(),
-        2,
-    )
+    let msg2_data = CreateConversationMessageData {
+        session_id: session.session_id,
+        role: "assistant".to_string(),
+        content: "助手回复".to_string(),
+        message_order: 2,
+        token_count: None,
+        model_used: None,
+        processing_time_ms: None,
+    };
+    let _msg2 = conv_repo.create(msg2_data)
     .await
     .unwrap();
 
@@ -229,14 +255,15 @@ async fn test_create_task() {
     let project_id = create_test_project(&db, user_id).await;
 
     let task_repo = TaskRepository::new(db.clone());
-    let task = task_repo.create(
+    let task_data = CreateTaskData {
         project_id,
-        None,
-        None,
-        "实现用户登录功能".to_string(),
-        "用户应该能够使用邮箱和密码登录".to_string(),
-        "development".to_string(),
-    )
+        parent_task_id: None,
+        llm_session_id: None,
+        title: "实现用户登录功能".to_string(),
+        description: "用户应该能够使用邮箱和密码登录".to_string(),
+        task_type: "development".to_string(),
+    };
+    let task = task_repo.create(task_data)
     .await
     .expect("创建任务应该成功");
 
@@ -257,26 +284,28 @@ async fn test_create_subtask() {
 
     let task_repo = TaskRepository::new(db.clone());
     // 创建父任务
-    let parent_task = task_repo.create(
+    let parent_task_data = CreateTaskData {
         project_id,
-        None,
-        None,
-        "用户管理模块".to_string(),
-        "实现完整的用户管理功能".to_string(),
-        "development".to_string(),
-    )
+        parent_task_id: None,
+        llm_session_id: None,
+        title: "用户管理模块".to_string(),
+        description: "实现完整的用户管理功能".to_string(),
+        task_type: "development".to_string(),
+    };
+    let parent_task = task_repo.create(parent_task_data)
     .await
     .unwrap();
 
     // 创建子任务
-    let subtask = task_repo.create(
+    let subtask_data = CreateTaskData {
         project_id,
-        Some(parent_task.task_id),
-        None,
-        "用户登录".to_string(),
-        "实现用户登录功能".to_string(),
-        "development".to_string(),
-    )
+        parent_task_id: Some(parent_task.task_id),
+        llm_session_id: None,
+        title: "用户登录".to_string(),
+        description: "实现用户登录功能".to_string(),
+        task_type: "development".to_string(),
+    };
+    let subtask = task_repo.create(subtask_data)
     .await
     .unwrap();
 
@@ -293,25 +322,27 @@ async fn test_find_tasks_by_project() {
 
     let task_repo = TaskRepository::new(db.clone());
     // 创建多个任务
-    let _task1 = task_repo.create(
+    let task1_data = CreateTaskData {
         project_id,
-        None,
-        None,
-        "任务1".to_string(),
-        "任务1描述".to_string(),
-        "development".to_string(),
-    )
+        parent_task_id: None,
+        llm_session_id: None,
+        title: "任务1".to_string(),
+        description: "任务1描述".to_string(),
+        task_type: "development".to_string(),
+    };
+    let _task1 = task_repo.create(task1_data)
     .await
     .unwrap();
 
-    let _task2 = task_repo.create(
+    let task2_data = CreateTaskData {
         project_id,
-        None,
-        None,
-        "任务2".to_string(),
-        "任务2描述".to_string(),
-        "testing".to_string(),
-    )
+        parent_task_id: None,
+        llm_session_id: None,
+        title: "任务2".to_string(),
+        description: "任务2描述".to_string(),
+        task_type: "testing".to_string(),
+    };
+    let _task2 = task_repo.create(task2_data)
     .await
     .unwrap();
 
@@ -332,14 +363,15 @@ async fn test_update_task_status() {
     let project_id = create_test_project(&db, user_id).await;
 
     let task_repo = TaskRepository::new(db.clone());
-    let task = task_repo.create(
+    let task_data = CreateTaskData {
         project_id,
-        None,
-        None,
-        "测试任务".to_string(),
-        "任务描述".to_string(),
-        "development".to_string(),
-    )
+        parent_task_id: None,
+        llm_session_id: None,
+        title: "测试任务".to_string(),
+        description: "任务描述".to_string(),
+        task_type: "development".to_string(),
+    };
+    let task = task_repo.create(task_data)
     .await
     .unwrap();
 
@@ -358,14 +390,15 @@ async fn test_assign_task() {
     let project_id = create_test_project(&db, user_id).await;
 
     let task_repo = TaskRepository::new(db.clone());
-    let task = task_repo.create(
+    let task_data = CreateTaskData {
         project_id,
-        None,
-        None,
-        "分配任务".to_string(),
-        "任务描述".to_string(),
-        "development".to_string(),
-    )
+        parent_task_id: None,
+        llm_session_id: None,
+        title: "分配任务".to_string(),
+        description: "任务描述".to_string(),
+        task_type: "development".to_string(),
+    };
+    let task = task_repo.create(task_data)
     .await
     .unwrap();
 

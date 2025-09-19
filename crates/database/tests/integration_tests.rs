@@ -6,7 +6,7 @@ use codex_database::{
     initialize_database, DatabaseConfig,
     repository::{
         user_repository::{UserRepository, CreateUserData},
-        project_repository::ProjectRepository,
+        project_repository::{ProjectRepository, CreateProjectData},
         agent_repository::{AgentRepository, CreateAgentData},
     },
     entities::agent::AgentStatus,
@@ -50,13 +50,14 @@ async fn create_test_project(
     user_id: Uuid
 ) -> Uuid {
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "多Agent协同开发系统".to_string(),
-        Some("基于SeaORM的数据库层实现".to_string()),
-        "https://github.com/test/multi-agent-system.git".to_string(),
-        "/workspace/multi-agent-system".to_string(),
-    ).await.unwrap();
+        name: "多Agent协同开发系统".to_string(),
+        description: Some("基于SeaORM的数据库层实现".to_string()),
+        repository_url: "https://github.com/test/multi-agent-system.git".to_string(),
+        workspace_path: "/workspace/multi-agent-system".to_string(),
+    };
+    let project = project_repo.create(project_data).await.unwrap();
     
     // 更新项目配置
     let tech_stack = serde_json::json!({
