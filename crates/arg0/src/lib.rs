@@ -124,9 +124,8 @@ where
 {
     for (key, value) in iter.into_iter().flatten() {
         if !key.to_ascii_uppercase().starts_with(ILLEGAL_ENV_VAR_PREFIX) {
-            // 在单线程环境下安全调用 set_var()
-            // SAFETY: 此时进程是单线程的，因此调用 set_var 是安全的
-            unsafe { std::env::set_var(key, value) };
+            // SAFETY: 在单线程阶段设置环境变量是安全的，此时还没有创建 Tokio 运行时
+            unsafe { std::env::set_var(&key, &value) };
         }
     }
 }
@@ -188,7 +187,7 @@ fn prepend_path_entry_for_apply_patch() -> std::io::Result<TempDir> {
         }
     };
 
-    // SAFETY: 此时进程是单线程的，因此调用 set_var 是安全的
+    // SAFETY: 在创建 Tokio 运行时之前设置 PATH 环境变量是安全的，此时仍是单线程
     unsafe {
         std::env::set_var("PATH", updated_path_env_var);
     }

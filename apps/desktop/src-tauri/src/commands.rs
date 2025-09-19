@@ -167,12 +167,13 @@ pub async fn send_message(
     app: AppHandle,
 ) -> Result<(), String> {
     let conversation_id_str = request.conversation_id.clone();
-    let conversation_id = uuid::Uuid::parse_str(&conversation_id_str)
+    // 从字符串创建ConversationId
+    let conversation_id = ConversationId::from_string(&conversation_id_str)
         .map_err(|_| "无效的对话ID")?;
     
     // 从ConversationManager获取对话实例
     let conversation = conversation_manager
-        .get_conversation(ConversationId(conversation_id))
+        .get_conversation(conversation_id)
         .await
         .map_err(|e| format!("获取对话失败: {e}"))?;
     
@@ -314,12 +315,13 @@ pub async fn interrupt_conversation(
 ) -> Result<(), String> {
     println!("正在中断对话: {}", conversation_id);
     
-    let conversation_uuid = uuid::Uuid::parse_str(&conversation_id)
+    // 从字符串创建ConversationId
+    let conversation_id = ConversationId::from_string(&conversation_id)
         .map_err(|_| "无效的对话ID")?;
     
     // 从ConversationManager获取对话实例
     let conversation = conversation_manager
-        .get_conversation(ConversationId(conversation_uuid))
+        .get_conversation(conversation_id)
         .await
         .map_err(|e| format!("获取对话失败: {e}"))?;
     
@@ -350,12 +352,13 @@ pub async fn approve_exec_command(
 ) -> Result<(), String> {
     println!("处理执行命令审批: {} -> {}", approval_id, decision);
     
-    let conversation_uuid = uuid::Uuid::parse_str(&conversation_id)
+    // 从字符串创建ConversationId
+    let conversation_id = ConversationId::from_string(&conversation_id)
         .map_err(|_| "无效的对话ID")?;
     
     // 从ConversationManager获取对话实例
     let conversation = conversation_manager
-        .get_conversation(ConversationId(conversation_uuid))
+        .get_conversation(conversation_id)
         .await
         .map_err(|e| format!("获取对话失败: {e}"))?;
     
@@ -389,12 +392,13 @@ pub async fn approve_patch_command(
 ) -> Result<(), String> {
     println!("处理补丁应用审批: {} -> {}", approval_id, decision);
     
-    let conversation_uuid = uuid::Uuid::parse_str(&conversation_id)
+    // 从字符串创建ConversationId
+    let conversation_id = ConversationId::from_string(&conversation_id)
         .map_err(|_| "无效的对话ID")?;
     
     // 从ConversationManager获取对话实例
     let conversation = conversation_manager
-        .get_conversation(ConversationId(conversation_uuid))
+        .get_conversation(conversation_id)
         .await
         .map_err(|e| format!("获取对话失败: {e}"))?;
     

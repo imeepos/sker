@@ -8,6 +8,7 @@ name = "codex_arg0"
 path = "src/lib.rs"
 
 [lints.rust]
+# 允许 unsafe 代码，因为需要在单线程阶段设置环境变量
 unsafe_code = "allow"
 
 [lints.clippy]
