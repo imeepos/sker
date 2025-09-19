@@ -59,9 +59,11 @@ export default defineConfig(async () => ({
             '@tauri-apps/plugin-updater'
           ],
           // 状态管理库单独打包
-          'store-vendor': ['zustand'],
+          'store-vendor': ['zustand', '@tanstack/react-query'],
           // 工具库单独打包
           'utils-vendor': ['clsx', 'class-variance-authority', 'lucide-react', 'tailwind-merge'],
+          // 表单相关库单独打包
+          'form-vendor': ['react-hook-form', 'zod', '@hookform/resolvers'],
           // Markdown 相关库单独打包
           'markdown-vendor': ['react-markdown', 'react-syntax-highlighter']
         }
@@ -79,6 +81,10 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       '@': '/src',
+      '@/shared': '/src/shared',
+      '@/features': '/src/features',
+      '@/app': '/src/app',
+      '@/pages': '/src/pages',
     }
   }
 }));

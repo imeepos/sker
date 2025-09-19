@@ -1,0 +1,32 @@
+# 构建输出
+dist/
+build/
+
+# 依赖
+node_modules/
+
+# 自动生成的文件
+src/shared/types/protocol/*.ts
+
+# 二进制文件
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot
+
+# 临时文件
+*.tmp
+*.temp
+
+# 日志文件
+*.log
+
+# 配置文件（保持原始格式）
+.eslintrc.js
+vite.config.ts

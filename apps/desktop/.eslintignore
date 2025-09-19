@@ -1,0 +1,29 @@
+# 构建输出
+dist/
+build/
+
+# 依赖
+node_modules/
+
+# 自动生成的文件
+src/shared/types/protocol/*.ts
+
+# 配置文件
+vite.config.ts
+tailwind.config.js
+postcss.config.js
+components.json
+
+# 测试覆盖率
+coverage/
+
+# 临时文件
+*.tmp
+*.temp
+
+# 日志文件
+*.log
+
+# IDE文件
+.vscode/
+.idea/

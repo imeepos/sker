@@ -1,4 +1,15 @@
 // UI组件统一导出
-export { Button } from './Button';
+export { Button, buttonVariants } from './Button';
 export { Input } from './Input';
-export { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './Dialog';
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogClose,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from './Dialog';
