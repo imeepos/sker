@@ -9,6 +9,7 @@ import type { Conversation as ChatProConversation } from './components/chat-pro/
 import type { ChatProEvent } from './components/chat-pro/index'
 // 导入全局清理工具 - 确保在应用启动时清理旧的监听器
 import './utils/globalCleanup'
+import { checkForAppUpdatesQuiet } from './lib/updater'
 
 type ViewMode = 'default' | 'three-column'
 
@@ -63,6 +64,19 @@ function App() {
     // 初始化时加载对话历史和设置
     loadConversations()
     loadSettings()
+    
+    // 延迟3秒后静默检查更新
+    const updateCheckTimer = setTimeout(async () => {
+      try {
+        await checkForAppUpdatesQuiet()
+      } catch (error) {
+        console.error('自动更新检查失败:', error)
+      }
+    }, 3000)
+    
+    return () => {
+      clearTimeout(updateCheckTimer)
+    }
   }, [loadConversations, loadSettings])
 
   // 开发模式下的手动清理功能

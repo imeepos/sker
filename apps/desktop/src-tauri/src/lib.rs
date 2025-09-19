@@ -15,6 +15,8 @@ pub mod settings_migration;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // 使用Tauri的运行时在启动时清理不兼容的设置
             tauri::async_runtime::spawn(async move {

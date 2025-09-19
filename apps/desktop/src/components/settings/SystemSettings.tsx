@@ -9,7 +9,8 @@ import { Switch } from '../ui/switch'
 import { useSettingsStore } from '../../stores/settings'
 import { ApiProvider, ApiConfig } from '../../types/settings'
 import { McpServerManager } from './McpServerManager'
-import { Save, Eye, EyeOff, TestTube, CheckCircle, XCircle } from 'lucide-react'
+import { Save, Eye, EyeOff, TestTube, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { checkForAppUpdates } from '../../lib/updater'
 
 export function SystemSettings() {
   const { settings, updateSettings, setFormDirty, setFormError } = useSettingsStore()
@@ -17,6 +18,7 @@ export function SystemSettings() {
   const [showApiKey, setShowApiKey] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
   const [testMessage, setTestMessage] = useState('')
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'updating'>('idle')
 
   // 处理API配置变化
   const handleApiConfigChange = (field: keyof ApiConfig, value: string) => {
@@ -110,6 +112,18 @@ export function SystemSettings() {
     }
     setLocalApiConfig(newConfig)
     setFormDirty(true)
+  }
+
+  // 检查应用更新
+  const handleCheckForUpdates = async () => {
+    setUpdateStatus('checking')
+    try {
+      await checkForAppUpdates()
+    } catch (error) {
+      console.error('检查更新失败:', error)
+    } finally {
+      setUpdateStatus('idle')
+    }
   }
 
   return (
@@ -374,6 +388,26 @@ export function SystemSettings() {
                 })
               }}
             />
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>应用更新</Label>
+                <div className="text-sm text-muted-foreground">
+                  检查并安装应用程序更新
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleCheckForUpdates}
+                disabled={updateStatus === 'checking'}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${updateStatus === 'checking' ? 'animate-spin' : ''}`} />
+                {updateStatus === 'checking' ? '检查中...' : '检查更新'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
