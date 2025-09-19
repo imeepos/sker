@@ -6,7 +6,7 @@ import React, { memo, useMemo, useCallback, useState, useEffect, useRef } from '
 import { Search, Plus, Filter, Grid, List, Users, ChevronDown } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { AgentCard } from './AgentCard'
-import type { Agent } from '../../../types/multi-agent'
+import type { Agent, AgentCapability } from '../../../types/multi-agent'
 
 interface AgentListProps {
   agents: Agent[]
@@ -21,7 +21,7 @@ interface AgentListProps {
 interface FilterOptions {
   status: Agent['status'][] | 'all'
   agentType: Agent['agentType'][] | 'all'
-  capabilities: string[]
+  capabilities: AgentCapability[]
 }
 
 // 排序选项
@@ -49,7 +49,7 @@ export const AgentList: React.FC<AgentListProps> = memo(({
     capabilities: []
   })
   const [showFilters, setShowFilters] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading] = useState(false)
   
   // 虚拟滚动相关
   const containerRef = useRef<HTMLDivElement>(null)
@@ -144,14 +144,6 @@ export const AgentList: React.FC<AgentListProps> = memo(({
     return sortedAgents.slice(visibleRange.start, visibleRange.end)
   }, [sortedAgents, visibleRange])
   
-  // 获取所有可用的技能
-  const allCapabilities = useMemo(() => {
-    const capabilities = new Set<string>()
-    agents.forEach(agent => {
-      agent.capabilities.forEach(cap => capabilities.add(cap))
-    })
-    return Array.from(capabilities).sort()
-  }, [agents])
   
   // 状态统计
   const statusStats = useMemo(() => {

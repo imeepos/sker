@@ -86,7 +86,6 @@ const categorizeSkills = (capabilities: string[]) => {
 
 export const SkillRadar: React.FC<SkillRadarProps> = ({
   capabilities,
-  agentName,
   size = 300,
   className,
   showLabels = true,
@@ -278,7 +277,7 @@ export const SkillRadar: React.FC<SkillRadarProps> = ({
     
     // 绘制标签
     if (showLabels) {
-      dataPoints.forEach((point, index) => {
+      dataPoints.forEach((point) => {
         const labelDistance = radius + 20
         const labelX = centerX + Math.cos(point.angle) * labelDistance
         const labelY = centerY + Math.sin(point.angle) * labelDistance

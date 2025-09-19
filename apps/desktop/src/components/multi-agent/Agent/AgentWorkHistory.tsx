@@ -107,7 +107,7 @@ const STATUS_CONFIG = {
 }
 
 // 模拟数据生成
-const generateMockWorkHistory = (agentId: string): WorkRecord[] => {
+const generateMockWorkHistory = (): WorkRecord[] => {
   const records: WorkRecord[] = []
   const now = new Date()
   
@@ -214,7 +214,7 @@ export const AgentWorkHistory: React.FC<AgentWorkHistoryProps> = ({
       try {
         // 这里应该调用实际的API
         // const data = await invoke<WorkRecord[]>('get_agent_work_history', { agentId })
-        const data = generateMockWorkHistory(agentId)
+        const data = generateMockWorkHistory()
         setRecords(data)
       } catch (error) {
         console.error('Failed to load work history:', error)

@@ -6,7 +6,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useAgentStore } from '../stores/agentStore'
-import type { Agent, AgentConfig, AgentStatus, AgentType } from '../types/multi-agent'
+import type { Agent, AgentStatus, AgentType } from '../types/multi-agent'
 
 // Agent统计信息
 interface AgentStats {
@@ -350,7 +350,7 @@ export const useAgents = (): UseAgentsReturn => {
   return {
     // 数据
     agents: store.agents,
-    selectedAgent: store.selectedAgentId ? getAgent(store.selectedAgentId) : null,
+    selectedAgent: store.selectedAgentId ? getAgent(store.selectedAgentId) || null : null,
     stats,
     
     // 状态

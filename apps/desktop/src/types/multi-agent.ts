@@ -13,6 +13,9 @@ import type { ConversationEvent } from './chat'
 /** Agent状态枚举 */
 export type AgentStatus = 'idle' | 'working' | 'error' | 'offline'
 
+/** Agent类型枚举 */
+export type AgentType = 'developer' | 'reviewer' | 'tester' | 'designer' | 'manager'
+
 /** Agent能力类型 */
 export type AgentCapability = 
   | 'frontend_development'
@@ -30,7 +33,7 @@ export type AgentCapability =
 export interface AgentConfig {
   name: string
   description?: string
-  agentType: 'developer' | 'reviewer' | 'tester' | 'designer'
+  agentType: AgentType
   capabilities: AgentCapability[]
   maxConcurrentTasks: number
   timeoutMinutes: number
@@ -53,7 +56,7 @@ export interface Agent {
   name: string
   description?: string
   status: AgentStatus
-  agentType: 'developer' | 'reviewer' | 'tester' | 'designer'
+  agentType: AgentType
   capabilities: AgentCapability[]
   currentTask?: string
   successRate: number
@@ -62,6 +65,13 @@ export interface Agent {
   lastActivity: Date
   createdAt: Date
   config: AgentConfig
+  maxConcurrentTasks: number
+  timeoutMinutes: number
+  gitConfig?: {
+    username: string
+    email: string
+    sshKey?: string
+  }
   metrics?: {
     averageCompletionTime: number // 分钟
     codeQualityScore: number // 0-100

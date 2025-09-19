@@ -21,7 +21,6 @@ export const ProjectManagementDemo: React.FC = () => {
     projects,
     selectedProject,
     selectProject,
-    createProject,
     loading,
     error
   } = useProjects()
@@ -70,6 +69,8 @@ export const ProjectManagementDemo: React.FC = () => {
           failedTasks: 2,
           lastActivity: new Date(),
           createdAt: new Date('2024-01-01'),
+          maxConcurrentTasks: 3,
+          timeoutMinutes: 60,
           config: {
             name: '前端开发Agent',
             agentType: 'developer',
