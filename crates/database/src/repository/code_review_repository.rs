@@ -14,12 +14,15 @@ pub struct CodeReviewRepository {
 pub struct CreateCodeReviewData {
     pub task_id: Uuid,
     pub execution_session_id: Uuid,
-    pub reviewer_agent_id: Option<Uuid>,
-    pub review_type: String,
+    pub reviewer_agent_id: Uuid,
+    pub pull_request_url: String,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub review_comments: serde_json::Value,
+    pub code_changes: serde_json::Value,
     pub status: String,
-    pub review_comments: Option<serde_json::Value>,
-    pub code_changes: Option<serde_json::Value>,
-    pub quality_score: Option<f64>,
+    pub decision: Option<String>,
+    pub overall_comment: Option<String>,
 }
 
 impl CodeReviewRepository {
@@ -38,15 +41,16 @@ impl CodeReviewRepository {
             task_id: Set(review_data.task_id),
             execution_session_id: Set(review_data.execution_session_id),
             reviewer_agent_id: Set(review_data.reviewer_agent_id),
-            review_type: Set(review_data.review_type),
-            status: Set(review_data.status),
+            pull_request_url: Set(review_data.pull_request_url),
+            source_branch: Set(review_data.source_branch),
+            target_branch: Set(review_data.target_branch),
             review_comments: Set(review_data.review_comments),
             code_changes: Set(review_data.code_changes),
-            quality_score: Set(review_data.quality_score),
-            started_at: Set(now),
-            completed_at: Set(None),
+            status: Set(review_data.status),
+            decision: Set(review_data.decision),
+            overall_comment: Set(review_data.overall_comment),
             created_at: Set(now),
-            updated_at: Set(now),
+            reviewed_at: Set(None),
             ..Default::default()
         };
         
@@ -119,11 +123,11 @@ impl CodeReviewRepository {
         
         let mut review: code_review::ActiveModel = review.into();
         review.status = Set(status.clone());
-        review.updated_at = Set(chrono::Utc::now().into());
+        review.created_at = Set(chrono::Utc::now().into());
         
         // 如果状态为完成，设置完成时间
         if status == "completed" || status == "approved" || status == "rejected" {
-            review.completed_at = Set(Some(chrono::Utc::now().into()));
+            review.reviewed_at = Set(Some(chrono::Utc::now().into()));
         }
         
         review.update(&self.db)
@@ -143,8 +147,8 @@ impl CodeReviewRepository {
             .ok_or_else(|| DatabaseError::entity_not_found("CodeReview", review_id))?;
         
         let mut review: code_review::ActiveModel = review.into();
-        review.review_comments = Set(Some(review_comments));
-        review.updated_at = Set(chrono::Utc::now().into());
+        review.review_comments = Set(review_comments);
+        review.created_at = Set(chrono::Utc::now().into());
         
         review.update(&self.db)
             .await
@@ -163,8 +167,9 @@ impl CodeReviewRepository {
             .ok_or_else(|| DatabaseError::entity_not_found("CodeReview", review_id))?;
         
         let mut review: code_review::ActiveModel = review.into();
-        review.quality_score = Set(Some(quality_score));
-        review.updated_at = Set(chrono::Utc::now().into());
+        // quality_score 字段在新模型中已移除，可以在 overall_comment 中记录
+        review.overall_comment = Set(Some(format!("质量评分：{}", quality_score)));
+        review.created_at = Set(chrono::Utc::now().into());
         
         review.update(&self.db)
             .await
@@ -186,10 +191,11 @@ impl CodeReviewRepository {
         
         let mut review: code_review::ActiveModel = review.into();
         review.status = Set(status);
-        review.review_comments = Set(Some(review_comments));
-        review.quality_score = Set(Some(quality_score));
-        review.completed_at = Set(Some(chrono::Utc::now().into()));
-        review.updated_at = Set(chrono::Utc::now().into());
+        review.review_comments = Set(review_comments);
+        // quality_score 字段在新模型中已移除，可以在 overall_comment 中记录
+        review.overall_comment = Set(Some(format!("质量评分：{}", quality_score)));
+        review.reviewed_at = Set(Some(chrono::Utc::now().into()));
+        review.created_at = Set(chrono::Utc::now().into());
         
         review.update(&self.db)
             .await
@@ -226,19 +232,22 @@ mod tests {
         let review_data = CreateCodeReviewData {
             task_id: Uuid::new_v4(),
             execution_session_id: Uuid::new_v4(),
-            reviewer_agent_id: Some(Uuid::new_v4()),
-            review_type: "automated".to_string(),
+            reviewer_agent_id: Uuid::new_v4(),
+            pull_request_url: "https://github.com/owner/repo/pull/123".to_string(),
+            source_branch: "feature/new-feature".to_string(),
+            target_branch: "main".to_string(),
+            review_comments: serde_json::json!({"issues": []}),
+            code_changes: serde_json::json!({"files": []}),
             status: "in_progress".to_string(),
-            review_comments: Some(serde_json::json!({"issues": []})),
-            code_changes: Some(serde_json::json!({"files": []})),
-            quality_score: Some(8.5),
+            decision: None,
+            overall_comment: None,
         };
         
         let review = repo.create(review_data).await.unwrap();
         
-        assert_eq!(review.review_type, "automated");
+        assert_eq!(review.pull_request_url, "https://github.com/owner/repo/pull/123");
         assert_eq!(review.status, "in_progress");
-        assert_eq!(review.quality_score, Some(8.5));
+        assert_eq!(review.source_branch, "feature/new-feature");
     }
 
     #[tokio::test]

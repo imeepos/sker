@@ -1,7 +1,7 @@
 //! 领域事件仓储实现
 
 use crate::{entities::domain_event, DatabaseConnection, DatabaseError, Result};
-use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait, Set, ColumnTrait, QueryFilter, QueryOrder};
 use uuid::Uuid;
 
 /// 领域事件仓储
@@ -38,7 +38,7 @@ impl DomainEventRepository {
             event_data: Set(event_data.event_data),
             event_version: Set(event_data.event_version),
             occurred_at: Set(now),
-            created_at: Set(now),
+            is_processed: Set(false),
             ..Default::default()
         };
         
@@ -128,7 +128,7 @@ impl DomainEventRepository {
                 event_data: Set(event_data.event_data),
                 event_version: Set(event_data.event_version),
                 occurred_at: Set(now),
-                created_at: Set(now),
+                is_processed: Set(false),
                 ..Default::default()
             };
             

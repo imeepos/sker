@@ -13,9 +13,12 @@ pub struct EventPublishLogRepository {
 #[derive(Debug, Clone)]
 pub struct CreateEventPublishLogData {
     pub event_id: Uuid,
-    pub publisher_name: String,
+    pub subscriber_type: String,
+    pub subscriber_id: String,
     pub status: String,
-    pub retry_count: i32,
+    pub attempts: i32,
+    pub max_attempts: i32,
+    pub response_data: Option<serde_json::Value>,
     pub error_message: Option<String>,
 }
 
@@ -33,11 +36,13 @@ impl EventPublishLogRepository {
         let log = event_publish_log::ActiveModel {
             log_id: Set(log_id),
             event_id: Set(log_data.event_id),
-            publisher_name: Set(log_data.publisher_name),
+            subscriber_type: Set(log_data.subscriber_type),
+            subscriber_id: Set(log_data.subscriber_id),
             status: Set(log_data.status),
-            retry_count: Set(log_data.retry_count),
+            attempts: Set(log_data.attempts),
+            max_attempts: Set(log_data.max_attempts),
+            response_data: Set(log_data.response_data),
             error_message: Set(log_data.error_message),
-            published_at: Set(now),
             created_at: Set(now),
             ..Default::default()
         };
@@ -62,17 +67,17 @@ impl EventPublishLogRepository {
     pub async fn find_by_event_id(&self, event_id: Uuid) -> Result<Vec<event_publish_log::Model>> {
         event_publish_log::Entity::find()
             .filter(event_publish_log::Column::EventId.eq(event_id))
-            .order_by_desc(event_publish_log::Column::PublishedAt)
+            .order_by_desc(event_publish_log::Column::CreatedAt)
             .all(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
-    /// 根据发布者名称查找日志
-    pub async fn find_by_publisher_name(&self, publisher_name: &str) -> Result<Vec<event_publish_log::Model>> {
+    /// 根据订阅者类型查找日志
+    pub async fn find_by_subscriber_type(&self, subscriber_type: &str) -> Result<Vec<event_publish_log::Model>> {
         event_publish_log::Entity::find()
-            .filter(event_publish_log::Column::PublisherName.eq(publisher_name))
-            .order_by_desc(event_publish_log::Column::PublishedAt)
+            .filter(event_publish_log::Column::SubscriberType.eq(subscriber_type))
+            .order_by_desc(event_publish_log::Column::CreatedAt)
             .all(&self.db)
             .await
             .map_err(DatabaseError::from)
@@ -82,7 +87,7 @@ impl EventPublishLogRepository {
     pub async fn find_by_status(&self, status: &str) -> Result<Vec<event_publish_log::Model>> {
         event_publish_log::Entity::find()
             .filter(event_publish_log::Column::Status.eq(status))
-            .order_by_desc(event_publish_log::Column::PublishedAt)
+            .order_by_desc(event_publish_log::Column::CreatedAt)
             .all(&self.db)
             .await
             .map_err(DatabaseError::from)
@@ -92,7 +97,7 @@ impl EventPublishLogRepository {
     pub async fn find_failed_logs(&self) -> Result<Vec<event_publish_log::Model>> {
         event_publish_log::Entity::find()
             .filter(event_publish_log::Column::Status.eq("failed"))
-            .order_by_asc(event_publish_log::Column::PublishedAt)
+            .order_by_asc(event_publish_log::Column::CreatedAt)
             .all(&self.db)
             .await
             .map_err(DatabaseError::from)
@@ -121,17 +126,24 @@ impl EventPublishLogRepository {
             .map_err(DatabaseError::from)
     }
     
-    /// 增加重试次数
-    pub async fn increment_retry_count(&self, log_id: Uuid) -> Result<event_publish_log::Model> {
+    /// 增加尝试次数
+    pub async fn increment_attempts(&self, log_id: Uuid) -> Result<event_publish_log::Model> {
         let log = event_publish_log::Entity::find_by_id(log_id)
             .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("EventPublishLog", log_id))?;
         
         let mut log: event_publish_log::ActiveModel = log.into();
-        let current_count = log.retry_count.as_ref().clone();
-        log.retry_count = Set(current_count + 1);
-        log.published_at = Set(chrono::Utc::now().into());
+        let current_count = log.attempts.as_ref().clone();
+        log.attempts = Set(current_count + 1);
+        
+        // 根据状态设置相应的时间戳
+        match log.status.as_ref().as_str() {
+            "sent" => log.sent_at = Set(Some(chrono::Utc::now().into())),
+            "delivered" => log.delivered_at = Set(Some(chrono::Utc::now().into())),
+            "failed" => log.failed_at = Set(Some(chrono::Utc::now().into())),
+            _ => {}
+        }
         
         log.update(&self.db)
             .await
@@ -151,11 +163,13 @@ impl EventPublishLogRepository {
             let log = event_publish_log::ActiveModel {
                 log_id: Set(log_id),
                 event_id: Set(log_data.event_id),
-                publisher_name: Set(log_data.publisher_name),
+                subscriber_type: Set(log_data.subscriber_type),
+                subscriber_id: Set(log_data.subscriber_id),
                 status: Set(log_data.status),
-                retry_count: Set(log_data.retry_count),
+                attempts: Set(log_data.attempts),
+                max_attempts: Set(log_data.max_attempts),
+                response_data: Set(log_data.response_data),
                 error_message: Set(log_data.error_message),
-                published_at: Set(now),
                 created_at: Set(now),
                 ..Default::default()
             };
@@ -185,7 +199,7 @@ impl EventPublishLogRepository {
     /// 清理旧的发布日志
     pub async fn cleanup_old_logs(&self, days: i64) -> Result<u64> {
         let cutoff_date = chrono::Utc::now() - chrono::Duration::days(days);
-        let cutoff_datetime = cutoff_date.into();
+        let cutoff_datetime: chrono::DateTime<chrono::FixedOffset> = cutoff_date.into();
         
         let result = event_publish_log::Entity::delete_many()
             .filter(event_publish_log::Column::CreatedAt.lt(cutoff_datetime))
@@ -215,17 +229,21 @@ mod tests {
         
         let log_data = CreateEventPublishLogData {
             event_id: Uuid::new_v4(),
-            publisher_name: "test_publisher".to_string(),
-            status: "success".to_string(),
-            retry_count: 0,
+            subscriber_type: "local_handler".to_string(),
+            subscriber_id: "test_subscriber".to_string(),
+            status: "delivered".to_string(),
+            attempts: 1,
+            max_attempts: 3,
+            response_data: None,
             error_message: None,
         };
         
         let log = repo.create(log_data).await.unwrap();
         
-        assert_eq!(log.publisher_name, "test_publisher");
-        assert_eq!(log.status, "success");
-        assert_eq!(log.retry_count, 0);
+        assert_eq!(log.subscriber_type, "local_handler");
+        assert_eq!(log.subscriber_id, "test_subscriber");
+        assert_eq!(log.status, "delivered");
+        assert_eq!(log.attempts, 1);
     }
 
     #[tokio::test]
@@ -236,9 +254,12 @@ mod tests {
         let event_id = Uuid::new_v4();
         let log_data = CreateEventPublishLogData {
             event_id,
-            publisher_name: "test_publisher".to_string(),
-            status: "success".to_string(),
-            retry_count: 0,
+            subscriber_type: "webhook".to_string(),
+            subscriber_id: "webhook_001".to_string(),
+            status: "sent".to_string(),
+            attempts: 1,
+            max_attempts: 3,
+            response_data: None,
             error_message: None,
         };
         
@@ -256,15 +277,18 @@ mod tests {
         
         let log_data = CreateEventPublishLogData {
             event_id: Uuid::new_v4(),
-            publisher_name: "test_publisher".to_string(),
+            subscriber_type: "message_queue".to_string(),
+            subscriber_id: "queue_001".to_string(),
             status: "failed".to_string(),
-            retry_count: 0,
+            attempts: 1,
+            max_attempts: 3,
+            response_data: None,
             error_message: Some("连接失败".to_string()),
         };
         
         let created_log = repo.create(log_data).await.unwrap();
-        let updated_log = repo.increment_retry_count(created_log.log_id).await.unwrap();
+        let updated_log = repo.increment_attempts(created_log.log_id).await.unwrap();
         
-        assert_eq!(updated_log.retry_count, 1);
+        assert_eq!(updated_log.attempts, 2);
     }
 }

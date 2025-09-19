@@ -1,7 +1,7 @@
 //! 执行日志仓储实现
 
 use crate::{entities::execution_log, DatabaseConnection, DatabaseError, Result};
-use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait, Set, ColumnTrait, QueryFilter, QueryOrder};
 use uuid::Uuid;
 
 /// 执行日志仓储
@@ -14,8 +14,10 @@ pub struct ExecutionLogRepository {
 pub struct CreateExecutionLogData {
     pub session_id: Uuid,
     pub log_level: String,
+    pub event_type: String,
     pub message: String,
-    pub context_data: Option<serde_json::Value>,
+    pub details: Option<serde_json::Value>,
+    pub timestamp_ms: i64,
 }
 
 impl ExecutionLogRepository {
@@ -33,8 +35,10 @@ impl ExecutionLogRepository {
             log_id: Set(log_id),
             session_id: Set(log_data.session_id),
             log_level: Set(log_data.log_level),
+            event_type: Set(log_data.event_type),
             message: Set(log_data.message),
-            context_data: Set(log_data.context_data),
+            details: Set(log_data.details),
+            timestamp_ms: Set(log_data.timestamp_ms),
             created_at: Set(now),
             ..Default::default()
         };
@@ -89,8 +93,10 @@ impl ExecutionLogRepository {
                 log_id: Set(log_id),
                 session_id: Set(log_data.session_id),
                 log_level: Set(log_data.log_level),
+                event_type: Set(log_data.event_type),
                 message: Set(log_data.message),
-                context_data: Set(log_data.context_data),
+                details: Set(log_data.details),
+                timestamp_ms: Set(log_data.timestamp_ms),
                 created_at: Set(now),
                 ..Default::default()
             };
@@ -148,8 +154,10 @@ mod tests {
         let log_data = CreateExecutionLogData {
             session_id: Uuid::new_v4(),
             log_level: "info".to_string(),
+            event_type: "execution_start".to_string(),
             message: "执行开始".to_string(),
-            context_data: Some(serde_json::json!({"step": 1})),
+            details: Some(serde_json::json!({"step": 1})),
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
         };
         
         let log = repo.create(log_data).await.unwrap();
@@ -167,8 +175,10 @@ mod tests {
         let log_data = CreateExecutionLogData {
             session_id,
             log_level: "info".to_string(),
+            event_type: "test_event".to_string(),
             message: "测试日志".to_string(),
-            context_data: None,
+            details: None,
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
         };
         
         let _created_log = repo.create(log_data).await.unwrap();
@@ -188,14 +198,18 @@ mod tests {
             CreateExecutionLogData {
                 session_id,
                 log_level: "info".to_string(),
+                event_type: "batch_test_1".to_string(),
                 message: "日志1".to_string(),
-                context_data: None,
+                details: None,
+                timestamp_ms: chrono::Utc::now().timestamp_millis(),
             },
             CreateExecutionLogData {
                 session_id,
                 log_level: "warn".to_string(),
+                event_type: "batch_test_2".to_string(),
                 message: "日志2".to_string(),
-                context_data: None,
+                details: None,
+                timestamp_ms: chrono::Utc::now().timestamp_millis(),
             },
         ];
         

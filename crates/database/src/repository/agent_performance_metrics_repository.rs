@@ -1,7 +1,7 @@
 //! Agent性能指标仓储实现
 
 use crate::{entities::agent_performance_metrics, DatabaseConnection, DatabaseError, Result};
-use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder, QuerySelect};
 use uuid::Uuid;
 
 /// Agent性能指标仓储

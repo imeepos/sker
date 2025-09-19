@@ -13,11 +13,12 @@ pub struct HumanDecisionRepository {
 #[derive(Debug, Clone)]
 pub struct CreateHumanDecisionData {
     pub conflict_id: Uuid,
-    pub decision_maker_id: Uuid,
+    pub user_id: Uuid,
     pub decision_type: String,
-    pub decision_content: String,
+    pub decision_data: Option<serde_json::Value>,
     pub reasoning: Option<String>,
-    pub metadata: Option<serde_json::Value>,
+    pub affected_entities: serde_json::Value,
+    pub follow_up_actions: serde_json::Value,
 }
 
 impl HumanDecisionRepository {
@@ -34,11 +35,12 @@ impl HumanDecisionRepository {
         let decision = human_decision::ActiveModel {
             decision_id: Set(decision_id),
             conflict_id: Set(decision_data.conflict_id),
-            decision_maker_id: Set(decision_data.decision_maker_id),
+            user_id: Set(decision_data.user_id),
             decision_type: Set(decision_data.decision_type),
-            decision_content: Set(decision_data.decision_content),
+            decision_data: Set(decision_data.decision_data),
             reasoning: Set(decision_data.reasoning),
-            metadata: Set(decision_data.metadata),
+            affected_entities: Set(decision_data.affected_entities),
+            follow_up_actions: Set(decision_data.follow_up_actions),
             created_at: Set(now),
             ..Default::default()
         };
@@ -69,10 +71,10 @@ impl HumanDecisionRepository {
             .map_err(DatabaseError::from)
     }
     
-    /// 根据决策制定者ID查找决策
-    pub async fn find_by_decision_maker_id(&self, decision_maker_id: Uuid) -> Result<Vec<human_decision::Model>> {
+    /// 根据用户ID查找决策
+    pub async fn find_by_user_id(&self, user_id: Uuid) -> Result<Vec<human_decision::Model>> {
         human_decision::Entity::find()
-            .filter(human_decision::Column::DecisionMakerId.eq(decision_maker_id))
+            .filter(human_decision::Column::UserId.eq(user_id))
             .order_by_desc(human_decision::Column::CreatedAt)
             .all(&self.db)
             .await
@@ -120,7 +122,7 @@ impl HumanDecisionRepository {
             .ok_or_else(|| DatabaseError::entity_not_found("HumanDecision", decision_id))?;
         
         let mut decision: human_decision::ActiveModel = decision.into();
-        decision.metadata = Set(Some(metadata));
+        decision.decision_data = Set(Some(metadata));
         
         decision.update(&self.db)
             .await
@@ -156,17 +158,23 @@ mod tests {
         
         let decision_data = CreateHumanDecisionData {
             conflict_id: Uuid::new_v4(),
-            decision_maker_id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             decision_type: "code_merge".to_string(),
-            decision_content: "选择版本A的实现".to_string(),
+            decision_data: Some(serde_json::json!({
+                "selected_option": "version_a",
+                "content": "选择版本A的实现"
+            })),
             reasoning: Some("版本A的性能更好".to_string()),
-            metadata: Some(serde_json::json!({"priority": "high"})),
+            affected_entities: serde_json::json!(["file1.rs", "file2.rs"]),
+            follow_up_actions: serde_json::json!(["merge_code", "run_tests"]),
         };
         
         let decision = repo.create(decision_data).await.unwrap();
         
         assert_eq!(decision.decision_type, "code_merge");
-        assert_eq!(decision.decision_content, "选择版本A的实现");
+        // 验证decision_data字段包含正确内容
+        let decision_data_value = decision.decision_data.as_ref().unwrap();
+        assert_eq!(decision_data_value["selected_option"], "version_a");
     }
 
     #[tokio::test]
@@ -177,11 +185,14 @@ mod tests {
         let conflict_id = Uuid::new_v4();
         let decision_data = CreateHumanDecisionData {
             conflict_id,
-            decision_maker_id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             decision_type: "code_merge".to_string(),
-            decision_content: "选择版本A的实现".to_string(),
+            decision_data: Some(serde_json::json!({
+                "content": "选择版本A的实现"
+            })),
             reasoning: None,
-            metadata: None,
+            affected_entities: serde_json::json!([]),
+            follow_up_actions: serde_json::json!([]),
         };
         
         let _created_decision = repo.create(decision_data).await.unwrap();

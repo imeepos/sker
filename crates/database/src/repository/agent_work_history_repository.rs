@@ -14,10 +14,13 @@ pub struct AgentWorkHistoryRepository {
 pub struct CreateAgentWorkHistoryData {
     pub agent_id: Uuid,
     pub task_id: Uuid,
-    pub work_type: String,
-    pub status: String,
-    pub result_summary: Option<String>,
-    pub time_spent_minutes: i32,
+    pub task_type: String,
+    pub success: Option<bool>,
+    pub completion_time_minutes: Option<i32>,
+    pub quality_score: Option<f64>,
+    pub work_details: Option<serde_json::Value>,
+    pub technologies_used: serde_json::Value,
+    pub error_message: Option<String>,
 }
 
 impl AgentWorkHistoryRepository {
@@ -35,10 +38,13 @@ impl AgentWorkHistoryRepository {
             history_id: Set(history_id),
             agent_id: Set(history_data.agent_id),
             task_id: Set(history_data.task_id),
-            work_type: Set(history_data.work_type),
-            status: Set(history_data.status),
-            result_summary: Set(history_data.result_summary),
-            time_spent_minutes: Set(history_data.time_spent_minutes),
+            task_type: Set(history_data.task_type),
+            success: Set(history_data.success),
+            completion_time_minutes: Set(history_data.completion_time_minutes),
+            quality_score: Set(history_data.quality_score),
+            work_details: Set(history_data.work_details),
+            technologies_used: Set(history_data.technologies_used),
+            error_message: Set(history_data.error_message),
             started_at: Set(now),
             completed_at: Set(Some(now)),
             created_at: Set(now),
@@ -85,8 +91,8 @@ impl AgentWorkHistoryRepository {
     pub async fn update_status(
         &self,
         history_id: Uuid,
-        status: String,
-        result_summary: Option<String>,
+        success: Option<bool>,
+        error_message: Option<String>,
     ) -> Result<agent_work_history::Model> {
         let history = agent_work_history::Entity::find_by_id(history_id)
             .one(&self.db)
@@ -94,9 +100,9 @@ impl AgentWorkHistoryRepository {
             .ok_or_else(|| DatabaseError::entity_not_found("AgentWorkHistory", history_id))?;
         
         let mut history: agent_work_history::ActiveModel = history.into();
-        history.status = Set(status);
-        if let Some(summary) = result_summary {
-            history.result_summary = Set(Some(summary));
+        history.success = Set(success);
+        if let Some(message) = error_message {
+            history.error_message = Set(Some(message));
         }
         history.completed_at = Set(Some(chrono::Utc::now().into()));
         
@@ -135,17 +141,20 @@ mod tests {
         let history_data = CreateAgentWorkHistoryData {
             agent_id: Uuid::new_v4(),
             task_id: Uuid::new_v4(),
-            work_type: "development".to_string(),
-            status: "completed".to_string(),
-            result_summary: Some("任务完成成功".to_string()),
-            time_spent_minutes: 120,
+            task_type: "development".to_string(),
+            success: Some(true),
+            completion_time_minutes: Some(120),
+            quality_score: Some(8.5),
+            work_details: Some(serde_json::json!({"summary": "任务完成成功"})),
+            technologies_used: serde_json::json!(["rust", "sql"]),
+            error_message: None,
         };
         
         let history = repo.create(history_data).await.unwrap();
         
-        assert_eq!(history.work_type, "development");
-        assert_eq!(history.status, "completed");
-        assert_eq!(history.time_spent_minutes, 120);
+        assert_eq!(history.task_type, "development");
+        assert_eq!(history.success, Some(true));
+        assert_eq!(history.completion_time_minutes, Some(120));
     }
 
     #[tokio::test]
@@ -157,10 +166,13 @@ mod tests {
         let history_data = CreateAgentWorkHistoryData {
             agent_id,
             task_id: Uuid::new_v4(),
-            work_type: "development".to_string(),
-            status: "completed".to_string(),
-            result_summary: Some("任务完成成功".to_string()),
-            time_spent_minutes: 120,
+            task_type: "development".to_string(),
+            success: Some(true),
+            completion_time_minutes: Some(90),
+            quality_score: Some(9.0),
+            work_details: Some(serde_json::json!({"summary": "任务完成成功"})),
+            technologies_used: serde_json::json!(["rust"]),
+            error_message: None,
         };
         
         let _created_history = repo.create(history_data).await.unwrap();

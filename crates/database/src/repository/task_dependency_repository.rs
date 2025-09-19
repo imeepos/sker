@@ -1,7 +1,7 @@
 //! 任务依赖仓储实现
 
 use crate::{entities::task_dependency, DatabaseConnection, DatabaseError, Result};
-use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait, Set, ActiveModelTrait, ColumnTrait, QueryFilter, QueryOrder, PaginatorTrait};
 use uuid::Uuid;
 
 /// 任务依赖仓储
@@ -12,10 +12,9 @@ pub struct TaskDependencyRepository {
 /// 创建任务依赖的数据结构
 #[derive(Debug, Clone)]
 pub struct CreateTaskDependencyData {
-    pub dependent_task_id: Uuid,
-    pub prerequisite_task_id: Uuid,
+    pub parent_task_id: Uuid,
+    pub child_task_id: Uuid,
     pub dependency_type: String,
-    pub description: Option<String>,
 }
 
 impl TaskDependencyRepository {
@@ -31,10 +30,9 @@ impl TaskDependencyRepository {
         
         let dependency = task_dependency::ActiveModel {
             dependency_id: Set(dependency_id),
-            dependent_task_id: Set(dependency_data.dependent_task_id),
-            prerequisite_task_id: Set(dependency_data.prerequisite_task_id),
+            parent_task_id: Set(dependency_data.parent_task_id),
+            child_task_id: Set(dependency_data.child_task_id),
             dependency_type: Set(dependency_data.dependency_type),
-            description: Set(dependency_data.description),
             created_at: Set(now),
             ..Default::default()
         };
@@ -58,7 +56,7 @@ impl TaskDependencyRepository {
     /// 根据依赖任务ID查找所有依赖关系
     pub async fn find_dependencies_for_task(&self, task_id: Uuid) -> Result<Vec<task_dependency::Model>> {
         task_dependency::Entity::find()
-            .filter(task_dependency::Column::DependentTaskId.eq(task_id))
+            .filter(task_dependency::Column::ChildTaskId.eq(task_id))
             .order_by_asc(task_dependency::Column::CreatedAt)
             .all(&self.db)
             .await
@@ -68,7 +66,7 @@ impl TaskDependencyRepository {
     /// 根据前置任务ID查找所有被阻塞的任务
     pub async fn find_blocked_tasks(&self, prerequisite_task_id: Uuid) -> Result<Vec<task_dependency::Model>> {
         task_dependency::Entity::find()
-            .filter(task_dependency::Column::PrerequisiteTaskId.eq(prerequisite_task_id))
+            .filter(task_dependency::Column::ParentTaskId.eq(prerequisite_task_id))
             .order_by_asc(task_dependency::Column::CreatedAt)
             .all(&self.db)
             .await
@@ -92,8 +90,8 @@ impl TaskDependencyRepository {
         prerequisite_task_id: Uuid,
     ) -> Result<bool> {
         let count = task_dependency::Entity::find()
-            .filter(task_dependency::Column::DependentTaskId.eq(dependent_task_id))
-            .filter(task_dependency::Column::PrerequisiteTaskId.eq(prerequisite_task_id))
+            .filter(task_dependency::Column::ChildTaskId.eq(dependent_task_id))
+            .filter(task_dependency::Column::ParentTaskId.eq(prerequisite_task_id))
             .count(&self.db)
             .await?;
         
@@ -113,28 +111,28 @@ impl TaskDependencyRepository {
     /// 获取任务的所有前置任务ID
     pub async fn get_prerequisite_task_ids(&self, task_id: Uuid) -> Result<Vec<Uuid>> {
         let dependencies = self.find_dependencies_for_task(task_id).await?;
-        Ok(dependencies.into_iter().map(|d| d.prerequisite_task_id).collect())
+        Ok(dependencies.into_iter().map(|d| d.parent_task_id).collect())
     }
     
     /// 获取任务的所有被阻塞任务ID
     pub async fn get_blocked_task_ids(&self, task_id: Uuid) -> Result<Vec<Uuid>> {
         let blocked = self.find_blocked_tasks(task_id).await?;
-        Ok(blocked.into_iter().map(|d| d.dependent_task_id).collect())
+        Ok(blocked.into_iter().map(|d| d.child_task_id).collect())
     }
     
     /// 更新依赖描述
     pub async fn update_description(
         &self,
         dependency_id: Uuid,
-        description: String,
+        _description: String,
     ) -> Result<task_dependency::Model> {
         let dependency = task_dependency::Entity::find_by_id(dependency_id)
             .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("TaskDependency", dependency_id))?;
         
-        let mut dependency: task_dependency::ActiveModel = dependency.into();
-        dependency.description = Set(Some(description));
+        let dependency: task_dependency::ActiveModel = dependency.into();
+        // description 字段在新模型中已移除
         
         dependency.update(&self.db)
             .await
@@ -154,13 +152,13 @@ impl TaskDependencyRepository {
     pub async fn delete_all_dependencies_for_task(&self, task_id: Uuid) -> Result<()> {
         // 删除作为依赖任务的记录
         task_dependency::Entity::delete_many()
-            .filter(task_dependency::Column::DependentTaskId.eq(task_id))
+            .filter(task_dependency::Column::ChildTaskId.eq(task_id))
             .exec(&self.db)
             .await?;
         
         // 删除作为前置任务的记录
         task_dependency::Entity::delete_many()
-            .filter(task_dependency::Column::PrerequisiteTaskId.eq(task_id))
+            .filter(task_dependency::Column::ParentTaskId.eq(task_id))
             .exec(&self.db)
             .await?;
         
@@ -179,10 +177,9 @@ impl TaskDependencyRepository {
             
             let dependency = task_dependency::ActiveModel {
                 dependency_id: Set(dependency_id),
-                dependent_task_id: Set(dependency_data.dependent_task_id),
-                prerequisite_task_id: Set(dependency_data.prerequisite_task_id),
+                parent_task_id: Set(dependency_data.parent_task_id),
+                child_task_id: Set(dependency_data.child_task_id),
                 dependency_type: Set(dependency_data.dependency_type),
-                description: Set(dependency_data.description),
                 created_at: Set(now),
                 ..Default::default()
             };
@@ -219,16 +216,14 @@ mod tests {
         let repo = TaskDependencyRepository::new(db);
         
         let dependency_data = CreateTaskDependencyData {
-            dependent_task_id: Uuid::new_v4(),
-            prerequisite_task_id: Uuid::new_v4(),
+            parent_task_id: Uuid::new_v4(),
+            child_task_id: Uuid::new_v4(),
             dependency_type: "blocking".to_string(),
-            description: Some("任务B必须等待任务A完成".to_string()),
         };
         
         let dependency = repo.create(dependency_data).await.unwrap();
         
         assert_eq!(dependency.dependency_type, "blocking");
-        assert!(dependency.description.is_some());
     }
 
     #[tokio::test]
@@ -240,18 +235,17 @@ mod tests {
         let prerequisite_id = Uuid::new_v4();
         
         let dependency_data = CreateTaskDependencyData {
-            dependent_task_id: task_id,
-            prerequisite_task_id: prerequisite_id,
+            parent_task_id: prerequisite_id,
+            child_task_id: task_id,
             dependency_type: "blocking".to_string(),
-            description: None,
         };
         
         let _created_dependency = repo.create(dependency_data).await.unwrap();
         
         let dependencies = repo.find_dependencies_for_task(task_id).await.unwrap();
         assert_eq!(dependencies.len(), 1);
-        assert_eq!(dependencies[0].dependent_task_id, task_id);
-        assert_eq!(dependencies[0].prerequisite_task_id, prerequisite_id);
+        assert_eq!(dependencies[0].child_task_id, task_id);
+        assert_eq!(dependencies[0].parent_task_id, prerequisite_id);
     }
 
     #[tokio::test]
@@ -264,10 +258,9 @@ mod tests {
         
         // 创建A依赖B
         let dependency_data = CreateTaskDependencyData {
-            dependent_task_id: task_a,
-            prerequisite_task_id: task_b,
+            parent_task_id: task_b,
+            child_task_id: task_a,
             dependency_type: "blocking".to_string(),
-            description: None,
         };
         
         let _created_dependency = repo.create(dependency_data).await.unwrap();
@@ -296,10 +289,9 @@ mod tests {
         
         // 创建依赖
         let dependency_data = CreateTaskDependencyData {
-            dependent_task_id: task_a,
-            prerequisite_task_id: task_b,
+            parent_task_id: task_b,
+            child_task_id: task_a,
             dependency_type: "blocking".to_string(),
-            description: None,
         };
         
         let _created_dependency = repo.create(dependency_data).await.unwrap();
