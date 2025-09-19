@@ -91,3 +91,7 @@ pnpm run --filter=@sker/desktop build
   - 新测试文件必须能编译通过
   - 使用 #[ignore] 标记未完成的测试
   - 使用 todo!() 标记未实现的方法
+
+
+  关闭端口号：
+  Bash(powershell "Stop-Process -Id 10052 -Force")
