@@ -5,13 +5,59 @@ use codex_core::{ConversationManager, NewConversation};
 use codex_core::config::{Config, ConfigOverrides, ConfigToml};
 use codex_core::protocol::{Op, InputItem, EventMsg};
 use codex_protocol::mcp_protocol::ConversationId;
+use codex_database::{
+    DatabaseConnection, 
+    repository::project_repository::{ProjectRepository, CreateProjectData},
+    repository::user_repository::{UserRepository, CreateUserData},
+    DatabaseConfig,
+    initialize_database,
+};
+use uuid::Uuid;
 use crate::{
-    models::{Conversation, SendMessageRequest},
+    models::{Conversation, SendMessageRequest, CreateProjectRequest, UpdateProjectRequest},
     settings::{SettingsManager, ApiProvider},
 };
 
 // 全局对话管理器
 type ConversationManagerHandle = Arc<ConversationManager>;
+
+// 数据库连接管理器
+type DatabaseHandle = Arc<DatabaseConnection>;
+
+// 创建数据库连接的辅助函数
+pub async fn create_database_connection() -> Result<DatabaseConnection, String> {
+    // 创建数据库配置目录
+    let data_dir = std::env::var("SKER_DATA_HOME")
+        .map(|h| std::path::PathBuf::from(h))
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().to_string());
+            std::path::PathBuf::from(home).join(".sker")
+        });
+    
+    // 确保目录存在
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("创建数据目录失败: {}", e))?;
+    
+    // 数据库文件路径
+    let db_path = data_dir.join("sker.db");
+    let database_url = format!("sqlite://{}?mode=rwc", db_path.display());
+    
+    // 创建数据库配置
+    let config = DatabaseConfig {
+        database_url,
+        max_connections: 10,
+        min_connections: 1,
+        connect_timeout: 30,
+        idle_timeout: 300,
+        enable_logging: false,
+    };
+    
+    // 初始化数据库
+    initialize_database(&config).await
+        .map_err(|e| format!("数据库初始化失败: {}", e))
+}
 
 // 创建配置的辅助函数
 async fn create_config() -> Result<Config, String> {
@@ -498,6 +544,221 @@ pub async fn remove_conversation_listener(
     _conversation_id: String,
 ) -> Result<(), String> {
     // 事件监听现在通过Tauri的事件系统直接处理
+    Ok(())
+}
+
+// === 项目管理API接口 ===
+
+/// 创建新项目
+#[tauri::command]
+pub async fn create_project(
+    request: CreateProjectRequest,
+    db: State<'_, DatabaseHandle>,
+) -> Result<crate::models::Project, String> {
+    println!("创建新项目: {}", request.name);
+    
+    let db = &**db;
+    let project_repo = ProjectRepository::new(db.clone());
+    
+    // 创建默认用户（临时方案，实际应该从认证系统获取）
+    let user_id = Uuid::new_v4();
+    let user_repo = UserRepository::new(db.clone());
+    
+    // 检查用户是否存在，不存在则创建
+    let existing_user = user_repo.find_by_id(user_id).await
+        .map_err(|e| format!("查询用户失败: {}", e))?;
+    
+    if existing_user.is_none() {
+        let user_data = CreateUserData {
+            username: "default_user".to_string(),
+            email: "user@example.com".to_string(),
+            password_hash: "placeholder_hash".to_string(),
+            profile_data: None,
+            settings: None,
+        };
+        
+        user_repo.create(user_data).await
+            .map_err(|e| format!("创建用户失败: {}", e))?;
+        
+        println!("创建了默认用户: {}", user_id);
+    }
+    
+    // 创建项目
+    let project_data = CreateProjectData {
+        user_id,
+        name: request.name.clone(),
+        description: request.description.clone(),
+        repository_url: request.repository_url.clone(),
+        workspace_path: request.workspace_path.clone(),
+    };
+    
+    let created_project = project_repo.create(project_data).await
+        .map_err(|e| format!("创建项目失败: {}", e))?;
+    
+    // 转换为前端模型
+    let project = crate::models::Project {
+        project_id: created_project.project_id.to_string(),
+        user_id: created_project.user_id.to_string(),
+        name: created_project.name,
+        description: created_project.description,
+        repository_url: created_project.repository_url,
+        main_branch: created_project.main_branch,
+        workspace_path: created_project.workspace_path,
+        technology_stack: created_project.technology_stack
+            .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+            .unwrap_or_default(),
+        status: created_project.status,
+        created_at: created_project.created_at.to_rfc3339(),
+        updated_at: created_project.updated_at.to_rfc3339(),
+    };
+    
+    println!("项目创建成功: {}", project.project_id);
+    Ok(project)
+}
+
+/// 获取项目列表
+#[tauri::command]
+pub async fn get_projects(
+    db: State<'_, DatabaseHandle>,
+) -> Result<Vec<crate::models::Project>, String> {
+    println!("获取项目列表");
+    
+    let db = &**db;
+    let _project_repo = ProjectRepository::new(db.clone());
+    
+    // 目前简化实现：获取第一个用户的所有项目
+    // 实际应该从认证系统获取当前用户ID
+    let _user_repo = UserRepository::new(db.clone());
+    
+    // 获取所有用户，取第一个用户的项目（临时方案）
+    // TODO: 实现正确的用户认证和项目查询
+    let _dummy_user_id = Uuid::new_v4(); // 这里应该是真实的用户ID
+    
+    // 暂时返回空列表，等实现用户系统后再完善
+    let projects = Vec::new();
+    
+    let result: Vec<crate::models::Project> = projects.into_iter().map(|p: codex_database::entities::project::Model| {
+        crate::models::Project {
+            project_id: p.project_id.to_string(),
+            user_id: p.user_id.to_string(),
+            name: p.name,
+            description: p.description,
+            repository_url: p.repository_url,
+            main_branch: p.main_branch,
+            workspace_path: p.workspace_path,
+            technology_stack: p.technology_stack
+                .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+                .unwrap_or_default(),
+            status: p.status,
+            created_at: p.created_at.to_rfc3339(),
+            updated_at: p.updated_at.to_rfc3339(),
+        }
+    }).collect();
+    
+    println!("返回项目数量: {}", result.len());
+    Ok(result)
+}
+
+/// 获取项目详情
+#[tauri::command]
+pub async fn get_project(
+    project_id: String,
+    db: State<'_, DatabaseHandle>,
+) -> Result<Option<crate::models::Project>, String> {
+    println!("获取项目详情: {}", project_id);
+    
+    let project_uuid = Uuid::parse_str(&project_id)
+        .map_err(|_| "无效的项目ID格式")?;
+    
+    let db = &**db;
+    let project_repo = ProjectRepository::new(db.clone());
+    
+    let project = project_repo.find_by_id(project_uuid).await
+        .map_err(|e| format!("查询项目失败: {}", e))?;
+    
+    match project {
+        Some(p) => {
+            let result = crate::models::Project {
+                project_id: p.project_id.to_string(),
+                user_id: p.user_id.to_string(),
+                name: p.name,
+                description: p.description,
+                repository_url: p.repository_url,
+                main_branch: p.main_branch,
+                workspace_path: p.workspace_path,
+                technology_stack: p.technology_stack
+                    .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+                    .unwrap_or_default(),
+                status: p.status,
+                created_at: p.created_at.to_rfc3339(),
+                updated_at: p.updated_at.to_rfc3339(),
+            };
+            Ok(Some(result))
+        }
+        None => Ok(None)
+    }
+}
+
+/// 更新项目
+#[tauri::command]
+pub async fn update_project(
+    request: UpdateProjectRequest,
+    db: State<'_, DatabaseHandle>,
+) -> Result<crate::models::Project, String> {
+    println!("更新项目: {}", request.project_id);
+    
+    let project_uuid = Uuid::parse_str(&request.project_id)
+        .map_err(|_| "无效的项目ID格式")?;
+    
+    let db = &**db;
+    let project_repo = ProjectRepository::new(db.clone());
+    
+    // 目前简化实现：只支持状态更新
+    if let Some(status) = request.status {
+        let updated_project = project_repo.update_status(project_uuid, &status).await
+            .map_err(|e| format!("更新项目状态失败: {}", e))?;
+        
+        let result = crate::models::Project {
+            project_id: updated_project.project_id.to_string(),
+            user_id: updated_project.user_id.to_string(),
+            name: updated_project.name,
+            description: updated_project.description,
+            repository_url: updated_project.repository_url,
+            main_branch: updated_project.main_branch,
+            workspace_path: updated_project.workspace_path,
+            technology_stack: updated_project.technology_stack
+                .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+                .unwrap_or_default(),
+            status: updated_project.status,
+            created_at: updated_project.created_at.to_rfc3339(),
+            updated_at: updated_project.updated_at.to_rfc3339(),
+        };
+        
+        println!("项目状态更新成功: {}", result.project_id);
+        Ok(result)
+    } else {
+        Err("目前只支持状态更新".to_string())
+    }
+}
+
+/// 删除项目
+#[tauri::command]
+pub async fn delete_project(
+    project_id: String,
+    db: State<'_, DatabaseHandle>,
+) -> Result<(), String> {
+    println!("删除项目: {}", project_id);
+    
+    let project_uuid = Uuid::parse_str(&project_id)
+        .map_err(|_| "无效的项目ID格式")?;
+    
+    let db = &**db;
+    let project_repo = ProjectRepository::new(db.clone());
+    
+    project_repo.delete(project_uuid).await
+        .map_err(|e| format!("删除项目失败: {}", e))?;
+    
+    println!("项目删除成功: {}", project_id);
     Ok(())
 }
 

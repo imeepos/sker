@@ -40,6 +40,7 @@
         "https://github.com/imeepos/sker/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM0QjEzMTNGQ0M4NUEzODEKUldTQm80WE1Qekd4TktXckJKNmVqZjhhbkUwMHpmZTFpT2FiN0xncFhseHlLekxKM2tSM2ZuZWoK"
-    }
+    },
+    "dialog": {}
   }
 }

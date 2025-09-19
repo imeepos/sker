@@ -4,6 +4,7 @@ import { LeftSidebar } from './LeftSidebar'
 import { ConversationList } from './ConversationList'
 import { ChatContent } from './ChatContent'
 import { ChatProEvent } from './index'
+import { ProjectManagementPage } from '../multi-agent/Project/ProjectManagementPage'
 
 export type NavigationItem = 
   | 'messages' 
@@ -15,6 +16,7 @@ export type NavigationItem =
   | 'contacts' 
   | 'ai-assistant' 
   | 'community' 
+  | 'project-management'
   | 'settings'
 
 export interface Conversation {
@@ -116,7 +118,7 @@ export function ThreeColumnLayout({
         />
       </div>
 
-      {/* 中间对话列表 */}
+      {/* 中间对话列表或功能区域 */}
       <div className="w-[320px] h-full border-r bg-background flex-shrink-0 overflow-hidden">
         {selectedNavigation === 'messages' ? (
           <ConversationList
@@ -126,6 +128,14 @@ export function ThreeColumnLayout({
             onCreateConversation={onCreateConversation}
             onDeleteConversation={onDeleteConversation}
           />
+        ) : selectedNavigation === 'project-management' ? (
+          // 项目管理时隐藏中间栏，让项目管理页面占据整个右侧区域
+          <div className="h-full flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <h3 className="font-medium mb-2">项目管理</h3>
+              <p className="text-sm">请在右侧查看项目管理界面</p>
+            </div>
+          </div>
         ) : (
           <div className="h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">
@@ -136,7 +146,7 @@ export function ThreeColumnLayout({
         )}
       </div>
 
-      {/* 右侧聊天内容区域 */}
+      {/* 右侧内容区域 */}
       <div className="flex-1 h-full min-w-0 overflow-hidden">
         {selectedNavigation === 'messages' && selectedConversation ? (
           <ChatContent
@@ -154,6 +164,8 @@ export function ThreeColumnLayout({
               <p className="text-sm">请从左侧列表中选择一个对话开始聊天</p>
             </div>
           </div>
+        ) : selectedNavigation === 'project-management' ? (
+          <ProjectManagementPage />
         ) : (
           <div className="h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">
@@ -179,6 +191,7 @@ function getNavigationLabel(item: NavigationItem): string {
     'contacts': '通讯录',
     'ai-assistant': 'AI助手',
     'community': '社区',
+    'project-management': '项目管理',
     'settings': '设置'
   }
   

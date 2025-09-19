@@ -52,6 +52,55 @@ pub struct SendMessageRequest {
     pub content: String,
 }
 
+/// 项目实体
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Project {
+    pub project_id: String,
+    pub user_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub repository_url: String,
+    pub main_branch: String,
+    pub workspace_path: String,
+    pub technology_stack: Vec<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// 创建项目请求
+#[derive(Debug, Deserialize)]
+pub struct CreateProjectRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub repository_url: String,
+    pub main_branch: Option<String>,
+    pub workspace_path: String,
+    pub technology_stack: Option<Vec<String>>,
+}
+
+/// 更新项目请求
+#[derive(Debug, Deserialize)]
+pub struct UpdateProjectRequest {
+    pub project_id: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub repository_url: Option<String>,
+    pub main_branch: Option<String>,
+    pub workspace_path: Option<String>,
+    pub technology_stack: Option<Vec<String>>,
+    pub status: Option<String>,
+}
+
+/// 项目请求（用于查询）
+#[derive(Debug, Deserialize)]
+pub struct ProjectRequest {
+    pub project_id: Option<String>,
+    pub user_id: Option<String>,
+    pub name: Option<String>,
+    pub status: Option<String>,
+}
+
 
 impl Message {
     /// 创建用户消息

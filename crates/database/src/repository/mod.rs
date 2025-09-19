@@ -3,6 +3,7 @@
 //! 为每个聚合根提供仓储接口
 
 pub mod user_repository;
+pub mod user_session_repository;
 pub mod project_repository;
 pub mod requirement_document_repository;
 pub mod llm_session_repository;
@@ -22,6 +23,7 @@ pub mod agent_performance_metrics_repository;
 
 // 重新导出
 pub use user_repository::UserRepository;
+pub use user_session_repository::UserSessionRepository;
 pub use project_repository::ProjectRepository;
 pub use requirement_document_repository::RequirementDocumentRepository;
 pub use llm_session_repository::LlmSessionRepository;

@@ -13,7 +13,8 @@ import {
   Users, 
   Bot, 
   Users2, 
-  Settings 
+  Settings,
+  FolderOpen 
 } from 'lucide-react'
 import type { NavigationItem } from './ThreeColumnLayout'
 
@@ -78,6 +79,11 @@ const navigationItems: Array<{
     key: 'community',
     icon: Users2,
     label: '社区'
+  },
+  {
+    key: 'project-management',
+    icon: FolderOpen,
+    label: '项目管理'
   },
   {
     key: 'settings',

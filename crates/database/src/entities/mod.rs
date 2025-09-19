@@ -1,6 +1,7 @@
 //! 数据库实体模块
 
 pub mod user;
+pub mod user_session;
 pub mod project;
 pub mod requirement_document;
 pub mod llm_session;
@@ -20,6 +21,7 @@ pub mod agent_performance_metrics;
 
 // 重新导出所有实体
 pub use user::Entity as User;
+pub use user_session::Entity as UserSession;
 pub use project::Entity as Project;
 pub use requirement_document::Entity as RequirementDocument;
 pub use llm_session::Entity as LlmSession;

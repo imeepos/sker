@@ -623,6 +623,7 @@ function getExtendedNavigationLabel(item: ExtendedNavigationItem): string {
     'contacts': '通讯录',
     'ai-assistant': 'AI助手',
     'community': '社区',
+    'project-management': '项目管理',
     'settings': '设置'
   }
   

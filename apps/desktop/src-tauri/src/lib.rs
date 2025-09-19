@@ -9,6 +9,7 @@ pub mod commands;
 pub mod models;
 pub mod settings;
 pub mod settings_migration;
+pub mod auth;
 
 /// 简化的应用程序入口
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -37,9 +38,32 @@ pub fn run() {
             let conversation_manager = Arc::new(ConversationManager::new(auth_manager));
             app.manage(conversation_manager);
             
+            // 初始化数据库连接
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                match commands::create_database_connection().await {
+                    Ok(db) => {
+                        let db_handle = Arc::new(db);
+                        app_handle.manage(db_handle);
+                        println!("数据库连接初始化成功");
+                    }
+                    Err(e) => {
+                        eprintln!("数据库连接初始化失败: {}", e);
+                        // 可以选择是否要退出应用程序
+                    }
+                }
+            });
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // 用户认证命令
+            auth::register,
+            auth::login,
+            auth::validate_token,
+            auth::refresh_token,
+            auth::logout,
+            auth::get_current_user,
             // 简化的对话命令
             commands::create_conversation,
             commands::send_message,
@@ -66,6 +90,12 @@ pub fn run() {
             settings::update_mcp_server,
             settings::delete_mcp_server,
             settings::toggle_mcp_server,
+            // 项目管理命令
+            commands::create_project,
+            commands::get_projects,
+            commands::get_project,
+            commands::update_project,
+            commands::delete_project,
         ])
         .run(tauri::generate_context!())
         .expect("运行Tauri应用程序时出错");

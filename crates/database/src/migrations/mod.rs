@@ -18,6 +18,9 @@ impl Migrator {
         // 创建用户表
         Self::create_users_table(db).await?;
         
+        // 创建用户会话表
+        Self::create_user_sessions_table(db).await?;
+        
         // 创建项目表
         Self::create_projects_table(db).await?;
         
@@ -96,6 +99,45 @@ impl Migrator {
             "CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)",
             "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
             "CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)",
+        ];
+        
+        for sql in index_sql {
+            db.execute_unprepared(sql).await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// 创建用户会话表
+    async fn create_user_sessions_table<C>(db: &C) -> Result<(), DbErr>
+    where
+        C: ConnectionTrait,
+    {
+        let sql = r#"
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                refresh_token TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                last_active_at TEXT NOT NULL,
+                ip_address TEXT,
+                user_agent TEXT,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            )
+        "#;
+        
+        db.execute_unprepared(sql).await?;
+        
+        // 创建索引
+        let index_sql = vec![
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token)",
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_refresh_token ON user_sessions(refresh_token)",
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_active ON user_sessions(is_active)",
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at)",
         ];
         
         for sql in index_sql {
@@ -771,7 +813,7 @@ impl Migrator {
         let check_sql = r#"
             SELECT name FROM sqlite_master 
             WHERE type='table' AND name IN (
-                'users', 'projects', 'requirement_documents', 'llm_sessions', 'llm_conversations', 'tasks',
+                'users', 'user_sessions', 'projects', 'requirement_documents', 'llm_sessions', 'llm_conversations', 'tasks',
                 'agents', 'agent_work_history', 'execution_sessions', 'execution_logs',
                 'conflicts', 'human_decisions', 'domain_events', 'event_publish_log',
                 'code_reviews', 'task_dependencies', 'agent_performance_metrics'

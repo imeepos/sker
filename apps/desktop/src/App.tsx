@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo } from 'react'
 import { Button } from './components/ui/Button'
 import { SettingsDialog } from './components/settings'
 import { ThreeColumnLayout } from './components/chat-pro/ThreeColumnLayout'
+import { AuthProvider, AuthGuard, useAuth } from './components/auth'
 import { useChatStore } from './stores/chat'
 import { useSettingsStore } from './stores/settings'
-import { Bot, Settings, Layout, ArrowLeft } from 'lucide-react'
+import { Bot, Settings, Layout, ArrowLeft, LogOut, User } from 'lucide-react'
 import type { Conversation as ChatProConversation } from './components/chat-pro/ThreeColumnLayout'
 import type { ChatProEvent } from './components/chat-pro/index'
 // 导入全局清理工具 - 确保在应用启动时清理旧的监听器
@@ -13,7 +14,8 @@ import { checkForAppUpdatesQuiet } from './lib/updater'
 
 type ViewMode = 'default' | 'three-column'
 
-function App() {
+function AppContent() {
+  const { user, logout } = useAuth()
   const {
     conversations,
     activeConversationId,
