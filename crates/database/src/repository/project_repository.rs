@@ -17,25 +17,18 @@ impl ProjectRepository {
     }
 
     /// 创建新项目
-    pub async fn create(
-        &self,
-        user_id: Uuid,
-        name: String,
-        description: Option<String>,
-        repository_url: String,
-        workspace_path: String,
-    ) -> Result<project::Model> {
+    pub async fn create(&self, project_data: CreateProjectData) -> Result<project::Model> {
         let now = chrono::Utc::now().into();
         let project_id = Uuid::new_v4();
         
         let project = project::ActiveModel {
             project_id: Set(project_id),
-            user_id: Set(user_id),
-            name: Set(name),
-            description: Set(description),
-            repository_url: Set(repository_url),
+            user_id: Set(project_data.user_id),
+            name: Set(project_data.name),
+            description: Set(project_data.description),
+            repository_url: Set(project_data.repository_url),
             main_branch: Set("main".to_string()),
-            workspace_path: Set(workspace_path),
+            workspace_path: Set(project_data.workspace_path),
             status: Set("active".to_string()),
             created_at: Set(now),
             updated_at: Set(now),
@@ -161,6 +154,16 @@ impl ProjectRepository {
     }
 }
 
+/// 创建项目的数据结构
+#[derive(Debug, Clone)]
+pub struct CreateProjectData {
+    pub user_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub repository_url: String,
+    pub workspace_path: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,13 +195,14 @@ mod tests {
         let user_id = create_test_user(&db).await;
         let project_repo = ProjectRepository::new(db.clone());
         
-        let project = project_repo.create(
+        let project_data = CreateProjectData {
             user_id,
-            "测试项目".to_string(),
-            Some("这是一个测试项目".to_string()),
-            "https://github.com/test/project.git".to_string(),
-            "/path/to/workspace".to_string(),
-        ).await.unwrap();
+            name: "测试项目".to_string(),
+            description: Some("这是一个测试项目".to_string()),
+            repository_url: "https://github.com/test/project.git".to_string(),
+            workspace_path: "/path/to/workspace".to_string(),
+        };
+        let project = project_repo.create(project_data).await.unwrap();
         
         assert_eq!(project.name, "测试项目");
         assert_eq!(project.user_id, user_id);
@@ -213,21 +217,23 @@ mod tests {
         let project_repo = ProjectRepository::new(db.clone());
         
         // 创建两个项目
-        let _project1 = project_repo.create(
+        let project1_data = CreateProjectData {
             user_id,
-            "项目1".to_string(),
-            None,
-            "https://github.com/test/project1.git".to_string(),
-            "/path/to/workspace1".to_string(),
-        ).await.unwrap();
+            name: "项目1".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/project1.git".to_string(),
+            workspace_path: "/path/to/workspace1".to_string(),
+        };
+        let _project1 = project_repo.create(project1_data).await.unwrap();
         
-        let _project2 = project_repo.create(
+        let project2_data = CreateProjectData {
             user_id,
-            "项目2".to_string(),
-            None,
-            "https://github.com/test/project2.git".to_string(),
-            "/path/to/workspace2".to_string(),
-        ).await.unwrap();
+            name: "项目2".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/project2.git".to_string(),
+            workspace_path: "/path/to/workspace2".to_string(),
+        };
+        let _project2 = project_repo.create(project2_data).await.unwrap();
         
         let projects = project_repo.find_by_user(user_id).await.unwrap();
         assert_eq!(projects.len(), 2);
@@ -239,13 +245,14 @@ mod tests {
         let user_id = create_test_user(&db).await;
         let project_repo = ProjectRepository::new(db.clone());
         
-        let project = project_repo.create(
+        let project_data = CreateProjectData {
             user_id,
-            "测试项目".to_string(),
-            None,
-            "https://github.com/test/project.git".to_string(),
-            "/path/to/workspace".to_string(),
-        ).await.unwrap();
+            name: "测试项目".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/project.git".to_string(),
+            workspace_path: "/path/to/workspace".to_string(),
+        };
+        let project = project_repo.create(project_data).await.unwrap();
         
         let tech_stack = serde_json::json!({
             "languages": ["Rust", "TypeScript"],
@@ -274,13 +281,14 @@ mod tests {
         let user_id = create_test_user(&db).await;
         let project_repo = ProjectRepository::new(db.clone());
         
-        let project = project_repo.create(
+        let project_data = CreateProjectData {
             user_id,
-            "测试项目".to_string(),
-            None,
-            "https://github.com/test/project.git".to_string(),
-            "/path/to/workspace".to_string(),
-        ).await.unwrap();
+            name: "测试项目".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/project.git".to_string(),
+            workspace_path: "/path/to/workspace".to_string(),
+        };
+        let project = project_repo.create(project_data).await.unwrap();
         
         assert_eq!(project.status, "active");
         

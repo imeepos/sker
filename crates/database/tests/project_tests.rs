@@ -3,7 +3,11 @@
 use crate::common::setup_test_db;
 use codex_database::{
     repository::{ProjectRepository, RequirementDocumentRepository, UserRepository},
-    repository::user_repository::CreateUserData,
+    repository::{
+        user_repository::CreateUserData,
+        project_repository::CreateProjectData,
+        requirement_document_repository::CreateRequirementDocumentData,
+    },
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -30,13 +34,14 @@ async fn test_create_project() {
 
     let user_id = create_test_user(&db).await;
     let project_repo = ProjectRepository::new(db.clone());
-    let project = project_repo.create(
+    let project_data = CreateProjectData {
         user_id,
-        "测试项目".to_string(),
-        Some("这是一个测试项目".to_string()),
-        "https://github.com/test/repo.git".to_string(),
-        "/workspace/test".to_string(),
-    )
+        name: "测试项目".to_string(),
+        description: Some("这是一个测试项目".to_string()),
+        repository_url: "https://github.com/test/repo.git".to_string(),
+        workspace_path: "/workspace/test".to_string(),
+    };
+    let project = project_repo.create(project_data)
     .await
     .expect("创建项目应该成功");
 

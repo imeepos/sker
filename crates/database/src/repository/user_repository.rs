@@ -62,31 +62,31 @@ impl UserRepository {
     }
     
     /// 根据邮箱查找用户
-    pub async fn find_by_email(db: &DatabaseConnection, email: &str) -> Result<Option<user::Model>> {
+    pub async fn find_by_email(&self, email: &str) -> Result<Option<user::Model>> {
         user::Entity::find()
             .filter(user::Column::Email.eq(email))
-            .one(db)
+            .one(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 根据用户名查找用户
-    pub async fn find_by_username(db: &DatabaseConnection, username: &str) -> Result<Option<user::Model>> {
+    pub async fn find_by_username(&self, username: &str) -> Result<Option<user::Model>> {
         user::Entity::find()
             .filter(user::Column::Username.eq(username))
-            .one(db)
+            .one(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新用户资料
     pub async fn update_profile(
-        db: &DatabaseConnection,
+        &self,
         user_id: Uuid,
         profile_data: JsonValue,
     ) -> Result<user::Model> {
         let user = user::Entity::find_by_id(user_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("User", user_id))?;
         
@@ -94,19 +94,19 @@ impl UserRepository {
         user.profile_data = Set(Some(profile_data));
         user.updated_at = Set(chrono::Utc::now().into());
         
-        user.update(db)
+        user.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新用户设置
     pub async fn update_settings(
-        db: &DatabaseConnection,
+        &self,
         user_id: Uuid,
         settings: JsonValue,
     ) -> Result<user::Model> {
         let user = user::Entity::find_by_id(user_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("User", user_id))?;
         
@@ -114,18 +114,18 @@ impl UserRepository {
         user.settings = Set(Some(settings));
         user.updated_at = Set(chrono::Utc::now().into());
         
-        user.update(db)
+        user.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 更新最后登录时间
     pub async fn update_last_login(
-        db: &DatabaseConnection,
+        &self,
         user_id: Uuid,
     ) -> Result<user::Model> {
         let user = user::Entity::find_by_id(user_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("User", user_id))?;
         
@@ -133,19 +133,19 @@ impl UserRepository {
         user.last_login_at = Set(Some(chrono::Utc::now().into()));
         user.updated_at = Set(chrono::Utc::now().into());
         
-        user.update(db)
+        user.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 激活/停用用户
     pub async fn set_active(
-        db: &DatabaseConnection,
+        &self,
         user_id: Uuid,
         is_active: bool,
     ) -> Result<user::Model> {
         let user = user::Entity::find_by_id(user_id)
-            .one(db)
+            .one(&self.db)
             .await?
             .ok_or_else(|| DatabaseError::entity_not_found("User", user_id))?;
         
@@ -153,15 +153,15 @@ impl UserRepository {
         user.is_active = Set(is_active);
         user.updated_at = Set(chrono::Utc::now().into());
         
-        user.update(db)
+        user.update(&self.db)
             .await
             .map_err(DatabaseError::from)
     }
     
     /// 删除用户
-    pub async fn delete(db: &DatabaseConnection, user_id: Uuid) -> Result<()> {
+    pub async fn delete(&self, user_id: Uuid) -> Result<()> {
         user::Entity::delete_by_id(user_id)
-            .exec(db)
+            .exec(&self.db)
             .await?;
         
         Ok(())
@@ -215,7 +215,7 @@ mod tests {
         
         let created_user = repo.create(user_data).await.unwrap();
         
-        let found_user = UserRepository::find_by_email(&db, "test@example.com")
+        let found_user = repo.find_by_email("test@example.com")
             .await.unwrap()
             .expect("应该找到用户");
         
@@ -242,7 +242,7 @@ mod tests {
             "bio": "这是一个测试用户"
         });
         
-        let updated_user = UserRepository::update_profile(&db, user.user_id, profile_data.clone())
+        let updated_user = repo.update_profile(user.user_id, profile_data.clone())
             .await.unwrap();
         
         assert_eq!(updated_user.profile_data, Some(profile_data));
@@ -265,7 +265,7 @@ mod tests {
         
         assert!(user.last_login_at.is_none());
         
-        let updated_user = UserRepository::update_last_login(&db, user.user_id)
+        let updated_user = repo.update_last_login(user.user_id)
             .await.unwrap();
         
         assert!(updated_user.last_login_at.is_some());

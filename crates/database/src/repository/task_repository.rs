@@ -17,26 +17,18 @@ impl TaskRepository {
     }
 
     /// 创建新任务
-    pub async fn create(
-        &self,
-        project_id: Uuid,
-        parent_task_id: Option<Uuid>,
-        llm_session_id: Option<Uuid>,
-        title: String,
-        description: String,
-        task_type: String,
-    ) -> Result<task::Model> {
+    pub async fn create(&self, task_data: CreateTaskData) -> Result<task::Model> {
         let now = chrono::Utc::now().into();
         let task_id = Uuid::new_v4();
         
         let task = task::ActiveModel {
             task_id: Set(task_id),
-            project_id: Set(project_id),
-            parent_task_id: Set(parent_task_id),
-            llm_session_id: Set(llm_session_id),
-            title: Set(title),
-            description: Set(description),
-            task_type: Set(task_type),
+            project_id: Set(task_data.project_id),
+            parent_task_id: Set(task_data.parent_task_id),
+            llm_session_id: Set(task_data.llm_session_id),
+            title: Set(task_data.title),
+            description: Set(task_data.description),
+            task_type: Set(task_data.task_type),
             priority: Set("medium".to_string()),
             status: Set("pending".to_string()),
             created_at: Set(now),
@@ -251,4 +243,15 @@ impl TaskRepository {
         
         Ok(())
     }
+}
+
+/// 创建任务的数据结构
+#[derive(Debug, Clone)]
+pub struct CreateTaskData {
+    pub project_id: Uuid,
+    pub parent_task_id: Option<Uuid>,
+    pub llm_session_id: Option<Uuid>,
+    pub title: String,
+    pub description: String,
+    pub task_type: String,
 }

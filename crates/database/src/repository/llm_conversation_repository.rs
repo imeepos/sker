@@ -16,58 +16,19 @@ impl LlmConversationRepository {
     }
 
     /// 创建新对话消息
-    pub async fn create_message(
-        &self,
-        session_id: Uuid,
-        role: String,
-        content: String,
-        message_order: i32,
-    ) -> Result<llm_conversation::Model> {
+    pub async fn create(&self, message_data: CreateConversationMessageData) -> Result<llm_conversation::Model> {
         let now = chrono::Utc::now().into();
         let message_id = Uuid::new_v4();
         
         let message = llm_conversation::ActiveModel {
             message_id: Set(message_id),
-            session_id: Set(session_id),
-            role: Set(role),
-            content: Set(content),
-            message_order: Set(message_order),
-            created_at: Set(now),
-            ..Default::default()
-        };
-        
-        let _result = llm_conversation::Entity::insert(message).exec(&self.db).await?;
-        
-        // 获取插入的消息
-        llm_conversation::Entity::find_by_id(message_id)
-            .one(&self.db)
-            .await?
-            .ok_or_else(|| DatabaseError::entity_not_found("LlmConversation", message_id))
-    }
-    
-    /// 创建带元数据的对话消息
-    pub async fn create_message_with_metadata(
-        &self,
-        session_id: Uuid,
-        role: String,
-        content: String,
-        message_order: i32,
-        token_count: Option<i32>,
-        model_used: Option<String>,
-        processing_time_ms: Option<i32>,
-    ) -> Result<llm_conversation::Model> {
-        let now = chrono::Utc::now().into();
-        let message_id = Uuid::new_v4();
-        
-        let message = llm_conversation::ActiveModel {
-            message_id: Set(message_id),
-            session_id: Set(session_id),
-            role: Set(role),
-            content: Set(content),
-            message_order: Set(message_order),
-            token_count: Set(token_count),
-            model_used: Set(model_used),
-            processing_time_ms: Set(processing_time_ms),
+            session_id: Set(message_data.session_id),
+            role: Set(message_data.role),
+            content: Set(message_data.content),
+            message_order: Set(message_data.message_order),
+            token_count: Set(message_data.token_count),
+            model_used: Set(message_data.model_used),
+            processing_time_ms: Set(message_data.processing_time_ms),
             created_at: Set(now),
         };
         
@@ -165,4 +126,16 @@ impl LlmConversationRepository {
         
         Ok(())
     }
+}
+
+/// 创建对话消息的数据结构
+#[derive(Debug, Clone)]
+pub struct CreateConversationMessageData {
+    pub session_id: Uuid,
+    pub role: String,
+    pub content: String,
+    pub message_order: i32,
+    pub token_count: Option<i32>,
+    pub model_used: Option<String>,
+    pub processing_time_ms: Option<i32>,
 }

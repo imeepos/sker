@@ -16,22 +16,16 @@ impl RequirementDocumentRepository {
     }
 
     /// 创建新需求文档
-    pub async fn create(
-        &self,
-        project_id: Uuid,
-        title: String,
-        content: String,
-        document_type: String,
-    ) -> Result<requirement_document::Model> {
+    pub async fn create(&self, document_data: CreateRequirementDocumentData) -> Result<requirement_document::Model> {
         let now = chrono::Utc::now().into();
         let document_id = Uuid::new_v4();
         
         let document = requirement_document::ActiveModel {
             document_id: Set(document_id),
-            project_id: Set(project_id),
-            title: Set(title),
-            content: Set(content),
-            document_type: Set(document_type),
+            project_id: Set(document_data.project_id),
+            title: Set(document_data.title),
+            content: Set(document_data.content),
+            document_type: Set(document_data.document_type),
             priority: Set("medium".to_string()),
             version: Set("1.0".to_string()),
             llm_processed: Set(false),
@@ -154,4 +148,13 @@ impl RequirementDocumentRepository {
         
         Ok(())
     }
+}
+
+/// 创建需求文档的数据结构
+#[derive(Debug, Clone)]
+pub struct CreateRequirementDocumentData {
+    pub project_id: Uuid,
+    pub title: String,
+    pub content: String,
+    pub document_type: String,
 }

@@ -17,25 +17,18 @@ impl LlmSessionRepository {
     }
 
     /// 创建新LLM会话
-    pub async fn create(
-        &self,
-        project_id: Uuid,
-        user_id: Uuid,
-        session_type: String,
-        system_prompt: Option<String>,
-        decomposition_prompt: Option<String>,
-    ) -> Result<llm_session::Model> {
+    pub async fn create(&self, session_data: CreateLlmSessionData) -> Result<llm_session::Model> {
         let now = chrono::Utc::now().into();
         let session_id = Uuid::new_v4();
         
         let session = llm_session::ActiveModel {
             session_id: Set(session_id),
-            project_id: Set(project_id),
-            user_id: Set(user_id),
-            session_type: Set(session_type),
+            project_id: Set(session_data.project_id),
+            user_id: Set(session_data.user_id),
+            session_type: Set(session_data.session_type),
             status: Set("active".to_string()),
-            system_prompt: Set(system_prompt),
-            decomposition_prompt: Set(decomposition_prompt),
+            system_prompt: Set(session_data.system_prompt),
+            decomposition_prompt: Set(session_data.decomposition_prompt),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -157,4 +150,14 @@ impl LlmSessionRepository {
         
         Ok(())
     }
+}
+
+/// 创建LLM会话的数据结构
+#[derive(Debug, Clone)]
+pub struct CreateLlmSessionData {
+    pub project_id: Uuid,
+    pub user_id: Uuid,
+    pub session_type: String,
+    pub system_prompt: Option<String>,
+    pub decomposition_prompt: Option<String>,
 }
