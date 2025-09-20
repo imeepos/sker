@@ -4,7 +4,10 @@ import { ProtectedRoute } from '../shared/components/auth';
 import {
   Dashboard,
   Projects,
+  ProjectDetail,
+  ProjectForm,
   Agents,
+  AgentDetails,
   Tasks,
   Conversations,
   Reviews,
@@ -47,12 +50,38 @@ export const router = createBrowserRouter([
       // 项目管理 - 对应 Project + RequirementDocument
       {
         path: 'projects',
-        element: <Projects />,
+        children: [
+          // 项目列表页面
+          {
+            index: true,
+            element: <Projects />,
+          },
+          // 创建项目页面
+          {
+            path: 'create',
+            element: <ProjectForm />,
+          },
+          // 项目详情页面
+          {
+            path: ':projectId',
+            element: <ProjectDetail />,
+          },
+          // 编辑项目页面
+          {
+            path: ':projectId/edit',
+            element: <ProjectForm />,
+          },
+        ],
       },
       // 智能体管理 - 对应 Agent + AgentWorkHistory + AgentPerformanceMetrics  
       {
         path: 'agents',
         element: <Agents />,
+      },
+      // 智能体详情页面
+      {
+        path: 'agents/:agentId',
+        element: <AgentDetails />,
       },
       // 任务中心 - 对应 Task + TaskDependency + ExecutionSession + ExecutionLog
       {

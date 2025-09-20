@@ -43,7 +43,7 @@ pub fn run() {
             // 初始化数据库连接
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                match commands::create_database_connection().await {
+                match commands::config::create_database_connection().await {
                     Ok(db) => {
                         let db_handle = Arc::new(db);
                         app_handle.manage(db_handle);

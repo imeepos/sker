@@ -1,7 +1,10 @@
 // 页面组件统一导出
 export { Dashboard } from './Dashboard';
 export { Projects } from './Projects';
+export { ProjectDetail } from './ProjectDetail';
+export { ProjectForm } from './ProjectForm';
 export { Agents } from './Agents';
+export { AgentDetails } from './AgentDetails';
 export { Tasks } from './Tasks';
 export { Conversations } from './Conversations';
 export { Reviews } from './Reviews';
