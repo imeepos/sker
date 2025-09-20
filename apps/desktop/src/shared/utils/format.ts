@@ -86,3 +86,29 @@ export function formatDuration(ms: number): string {
 
   return `0:${seconds.toString().padStart(2, '0')}`;
 }
+
+/**
+ * 格式化日期时间
+ */
+export function formatDateTime(timestamp: number | Date): string {
+  const date = typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+// 格式化工具对象
+export const format = {
+  relativeTime: formatRelativeTime,
+  fileSize: formatFileSize,
+  number: formatNumber,
+  percentage: formatPercentage,
+  truncateText,
+  duration: formatDuration,
+  dateTime: formatDateTime,
+};
