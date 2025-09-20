@@ -101,6 +101,87 @@ pub struct ProjectRequest {
     pub status: Option<String>,
 }
 
+/// 智能体实体
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    pub agent_id: String,
+    pub user_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub prompt_template: String,
+    pub capabilities: Vec<String>,
+    pub config: serde_json::Value,
+    pub git_config: Option<serde_json::Value>,
+    pub status: String,
+    pub current_task_id: Option<String>,
+    pub total_tasks_completed: i32,
+    pub success_rate: f64,
+    pub average_completion_time: i32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_active_at: String,
+    pub skill_profile: Option<serde_json::Value>,
+    pub skill_assessments: Option<serde_json::Value>,
+    pub performance_trend: Option<serde_json::Value>,
+}
+
+/// 创建智能体请求
+#[derive(Debug, Deserialize)]
+pub struct CreateAgentRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub prompt_template: String,
+    pub capabilities: Vec<String>,
+    pub config: Option<serde_json::Value>,
+    pub git_config: Option<serde_json::Value>,
+}
+
+/// 更新智能体请求
+#[derive(Debug, Deserialize)]
+pub struct UpdateAgentRequest {
+    pub agent_id: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub prompt_template: Option<String>,
+    pub capabilities: Option<Vec<String>>,
+    pub config: Option<serde_json::Value>,
+    pub git_config: Option<serde_json::Value>,
+    pub status: Option<String>,
+}
+
+/// 智能体工作历史
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentWorkHistory {
+    pub history_id: String,
+    pub agent_id: String,
+    pub task_id: String,
+    pub task_type: String,
+    pub started_at: String,
+    pub completed_at: Option<String>,
+    pub success: Option<bool>,
+    pub completion_time_minutes: Option<i32>,
+    pub quality_score: Option<f64>,
+    pub work_details: Option<serde_json::Value>,
+    pub technologies_used: Vec<String>,
+    pub error_message: Option<String>,
+    pub created_at: String,
+}
+
+/// 智能体性能指标
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPerformanceMetrics {
+    pub metrics_id: String,
+    pub agent_id: String,
+    pub period_start: String,
+    pub period_end: String,
+    pub tasks_completed: i32,
+    pub tasks_successful: i32,
+    pub avg_completion_time: f64,
+    pub avg_code_quality: f64,
+    pub skill_improvements: serde_json::Value,
+    pub created_at: String,
+}
+
 
 impl Message {
     /// 创建用户消息

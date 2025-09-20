@@ -1,2 +1,2 @@
-// 通用组件导出
-export { ErrorBoundary, withErrorBoundary, AsyncErrorBoundary } from './ErrorBoundary';
+// 通用组件统一导出
+export { ErrorBoundary } from './ErrorBoundary';

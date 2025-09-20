@@ -1,2 +1,4 @@
 // 布局组件统一导出
-export * from './AppLayout';
+export { AppLayout } from './AppLayout';
+export { Sidebar } from './Sidebar';
+export { Header } from './Header';

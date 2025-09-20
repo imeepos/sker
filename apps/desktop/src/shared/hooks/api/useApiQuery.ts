@@ -1,52 +1,34 @@
-// React Query API Hooks
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
-import { IpcError } from '@/shared/api/client';
+import { IpcError } from '../../api/client';
 
 /**
- * 统一的 API Query Hook
+ * 通用API查询Hook
+ * 基于TanStack Query封装，提供统一的查询状态管理
  */
-export function useApiQuery<TData, TError = IpcError>(
+export function useApiQuery<T>(
   queryKey: unknown[],
-  queryFn: () => Promise<TData>,
-  options?: Omit<UseQueryOptions<TData, TError>, 'queryKey' | 'queryFn'>
+  queryFn: () => Promise<T>,
+  options?: Omit<UseQueryOptions<T, IpcError>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey,
     queryFn,
     retry: (failureCount, error) => {
       // 认证错误不重试
-      if (error instanceof IpcError && error.isAuthError()) {
+      if (error instanceof IpcError && error.code.startsWith('AUTH_')) {
         return false;
       }
-      // 最多重试2次
-      return failureCount < 2;
-    },
-    staleTime: 5 * 60 * 1000, // 5 分钟
-    gcTime: 10 * 60 * 1000, // 10 分钟 (原 cacheTime)
-    refetchOnWindowFocus: false,
-    ...options,
-  });
-}
-
-/**
- * 无限查询 Hook
- */
-export function useApiInfiniteQuery<TData, TError = IpcError>(
-  queryKey: unknown[],
-  queryFn: ({ pageParam }: { pageParam: number }) => Promise<TData>,
-  options?: Omit<UseQueryOptions<TData, TError>, 'queryKey' | 'queryFn'>
-) {
-  return useQuery({
-    queryKey,
-    queryFn: () => queryFn({ pageParam: 1 }),
-    retry: (failureCount, error) => {
-      if (error instanceof IpcError && error.isAuthError()) {
+      // Token过期错误不重试
+      if (error instanceof IpcError && error.code.includes('TOKEN_EXPIRED')) {
         return false;
       }
+      // 其他错误最多重试2次
       return failureCount < 2;
     },
-    staleTime: 2 * 60 * 1000, // 2 分钟
-    gcTime: 5 * 60 * 1000, // 5 分钟
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    staleTime: 5 * 60 * 1000, // 5分钟内认为数据是新鲜的
+    gcTime: 10 * 60 * 1000,   // 10分钟后垃圾回收
+    refetchOnWindowFocus: false, // 窗口聚焦时不自动重新获取
     ...options,
   });
 }

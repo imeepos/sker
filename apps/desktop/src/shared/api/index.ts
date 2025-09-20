@@ -1,3 +1,3 @@
-// 统一的API导出
+// API 模块统一导出
 export * from './client';
-export * from './types';
+export * from './auth';

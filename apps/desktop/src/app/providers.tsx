@@ -1,12 +1,12 @@
-// 全局 Providers 配置
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { IpcError } from '@/shared/api/client';
-import { useAppStore } from '@/shared/stores/app';
-import { useAuthStore } from '@/shared/stores/auth';
-import { ErrorBoundary } from '@/shared/components/common';
-import { useErrorBoundaryHandler } from '@/shared/hooks/utils';
+import { IpcError } from '../shared/api/client';
+import { useAppStore } from '../shared/stores/app';
+import { useAuthStore } from '../shared/stores/auth';
+import { ErrorBoundary } from '../shared/components/common';
+import { ThemeProvider } from '../shared/components/theme/ThemeProvider';
+import { useErrorBoundaryHandler } from '../shared/hooks/utils';
 
 /**
  * 创建 QueryClient 实例
@@ -107,17 +107,6 @@ export function QueryProvider({ children }: QueryProviderProps) {
 }
 
 /**
- * 主题 Provider（暂时占位，后续可扩展）
- */
-interface ThemeProviderProps {
-  children: React.ReactNode;
-}
-
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  return <>{children}</>;
-}
-
-/**
  * 错误边界包装器
  */
 function ErrorBoundaryWrapper({ children }: { children: React.ReactNode }) {
@@ -135,7 +124,8 @@ function ErrorBoundaryWrapper({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * 所有 Providers 的组合
+ * 全局Provider组件
+ * 包含所有全局状态管理和配置
  */
 interface ProvidersProps {
   children: React.ReactNode;

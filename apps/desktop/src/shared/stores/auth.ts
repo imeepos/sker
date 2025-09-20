@@ -1,87 +1,93 @@
-// 认证状态管理
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User } from '@/shared/types';
-import { STORAGE_KEYS } from '@/shared/utils/constants';
+import type { 
+  AuthState, 
+  AuthResponse,
+  CurrentUser 
+} from '../types/auth';
 
-interface AuthState {
-  // 状态
-  isAuthenticated: boolean;
-  user: User | null;
-  token: string | null;
-  isLoading: boolean;
-
-  // 动作
-  setAuth: (token: string, user: User) => void;
-  setUser: (user: User) => void;
-  setLoading: (loading: boolean) => void;
+/**
+ * 认证状态管理
+ * 基于Zustand的持久化认证状态
+ * 
+ * 注意：API调用和状态管理由React Query负责
+ * 这里只负责存储认证信息和基本状态操作
+ */
+interface AuthStore extends AuthState {
+  // 操作方法
+  setAuth: (response: AuthResponse) => void;
+  setUser: (user: CurrentUser) => void;
   clearAuth: () => void;
-  updateUserProfile: (updates: Partial<User>) => void;
+  isTokenExpired: () => boolean;
 }
 
-export const useAuthStore = create<AuthState>()(
+export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
       // 初始状态
       isAuthenticated: false,
       user: null,
       token: null,
-      isLoading: false,
+      refreshToken: null,
+      expiresAt: null,
 
-      // 动作实现
-      setAuth: (token, user) => {
+      // 设置认证信息
+      setAuth: (response: AuthResponse) => {
+        const expiresAt = new Date(Date.now() + response.expires_in * 1000);
         set({
           isAuthenticated: true,
-          token,
-          user,
-          isLoading: false,
+          user: response.user,
+          token: response.token,
+          refreshToken: response.refresh_token,
+          expiresAt,
         });
       },
 
-      setUser: user => {
+      // 设置用户信息
+      setUser: (user: CurrentUser) => {
         set({ user });
       },
 
-      setLoading: loading => {
-        set({ isLoading: loading });
-      },
-
+      // 清除认证信息
       clearAuth: () => {
         set({
           isAuthenticated: false,
-          token: null,
           user: null,
-          isLoading: false,
+          token: null,
+          refreshToken: null,
+          expiresAt: null,
         });
       },
 
-      updateUserProfile: updates => {
-        const currentUser = get().user;
-        if (currentUser) {
-          set({
-            user: { ...currentUser, ...updates },
-          });
+      // 检查Token是否过期
+      isTokenExpired: () => {
+        const { expiresAt } = get();
+        if (!expiresAt) return true;
+        
+        const now = new Date();
+        const expires = new Date(expiresAt);
+        const isExpired = now >= expires;
+        
+        // 如果token过期，异步清除认证状态避免渲染中的状态更新
+        if (isExpired) {
+          setTimeout(() => {
+            const { clearAuth } = get();
+            clearAuth();
+          }, 0);
         }
+        
+        return isExpired;
       },
     }),
     {
-      name: STORAGE_KEYS.AUTH_TOKEN,
-      partialize: state => ({
+      name: 'auth-storage',
+      partialize: (state) => ({
         token: state.token,
+        refreshToken: state.refreshToken,
         user: state.user,
+        expiresAt: state.expiresAt,
         isAuthenticated: state.isAuthenticated,
       }),
     }
   )
 );
-
-// 选择器函数
-export const authSelectors = {
-  isAuthenticated: (state: AuthState) => state.isAuthenticated,
-  user: (state: AuthState) => state.user,
-  token: (state: AuthState) => state.token,
-  isLoading: (state: AuthState) => state.isLoading,
-  userId: (state: AuthState) => state.user?.id,
-  userEmail: (state: AuthState) => state.user?.email,
-  userName: (state: AuthState) => state.user?.name,
-};

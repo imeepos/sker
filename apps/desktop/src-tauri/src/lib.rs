@@ -10,6 +10,7 @@ pub mod models;
 pub mod settings;
 pub mod settings_migration;
 pub mod auth;
+pub mod credentials;
 
 /// 简化的应用程序入口
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,6 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             // 使用Tauri的运行时在启动时清理不兼容的设置
             tauri::async_runtime::spawn(async move {
@@ -64,6 +66,8 @@ pub fn run() {
             auth::refresh_token,
             auth::logout,
             auth::get_current_user,
+            auth::change_password,
+            auth::update_user_info,
             // 简化的对话命令
             commands::create_conversation,
             commands::send_message,
@@ -96,6 +100,19 @@ pub fn run() {
             commands::get_project,
             commands::update_project,
             commands::delete_project,
+            // 凭据管理命令
+            credentials::save_credentials,
+            credentials::get_saved_credentials,
+            credentials::clear_saved_credentials,
+            credentials::has_saved_credentials,
+            // 智能体管理命令
+            commands::create_agent,
+            commands::get_agents,
+            commands::get_agent,
+            commands::update_agent,
+            commands::delete_agent,
+            commands::get_agent_work_history,
+            commands::get_agent_performance_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("运行Tauri应用程序时出错");

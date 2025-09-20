@@ -1,2 +1,2 @@
-// 工具Hooks导出
-export { useErrorHandler, useErrorBoundaryHandler } from './useErrorHandler';
+// 工具类 Hooks 统一导出
+export { useErrorBoundaryHandler } from './useErrorBoundaryHandler';

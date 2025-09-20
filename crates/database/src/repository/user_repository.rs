@@ -158,6 +158,55 @@ impl UserRepository {
             .map_err(DatabaseError::from)
     }
     
+    /// 更新密码
+    pub async fn update_password(
+        &self,
+        user_id: Uuid,
+        password_hash: String,
+    ) -> Result<user::Model> {
+        let user = user::Entity::find_by_id(user_id)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| DatabaseError::entity_not_found("User", user_id))?;
+        
+        let mut user: user::ActiveModel = user.into();
+        user.password_hash = Set(password_hash);
+        user.updated_at = Set(chrono::Utc::now().into());
+        
+        user.update(&self.db)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
+    /// 更新用户基本信息
+    pub async fn update_user_info(
+        &self,
+        user_id: Uuid,
+        username: Option<String>,
+        email: Option<String>,
+    ) -> Result<user::Model> {
+        let user = user::Entity::find_by_id(user_id)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| DatabaseError::entity_not_found("User", user_id))?;
+        
+        let mut user: user::ActiveModel = user.into();
+        
+        if let Some(username) = username {
+            user.username = Set(username);
+        }
+        
+        if let Some(email) = email {
+            user.email = Set(email);
+        }
+        
+        user.updated_at = Set(chrono::Utc::now().into());
+        
+        user.update(&self.db)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
     /// 删除用户
     pub async fn delete(&self, user_id: Uuid) -> Result<()> {
         user::Entity::delete_by_id(user_id)

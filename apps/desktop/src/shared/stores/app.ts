@@ -1,117 +1,90 @@
-// 应用状态管理
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Theme } from '@/shared/types';
-import { STORAGE_KEYS, THEME } from '@/shared/utils/constants';
 
-interface AppState {
-  // UI 状态
-  sidebarCollapsed: boolean;
-  theme: Theme;
-
-  // 应用状态
-  isLoading: boolean;
-  error: string | null;
-
-  // 通知状态
-  notifications: Array<{
-    id: string;
-    type: 'success' | 'error' | 'warning' | 'info';
-    title: string;
-    message?: string;
-    timestamp: number;
-  }>;
-
-  // 动作
-  toggleSidebar: () => void;
-  setSidebarCollapsed: (collapsed: boolean) => void;
-  setTheme: (theme: Theme) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-  clearError: () => void;
-
-  // 通知动作
-  addNotification: (
-    notification: Omit<AppState['notifications'][0], 'id' | 'timestamp'>
-  ) => void;
-  removeNotification: (id: string) => void;
-  clearNotifications: () => void;
+// 通知类型定义
+export interface Notification {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+  duration?: number; // 显示时长（毫秒），0 表示不自动关闭
+  timestamp: number;
 }
 
+// 应用设置接口
+export interface AppSettings {
+  theme: 'light' | 'dark' | 'system';
+  language: 'zh-CN' | 'en-US';
+  autoSave: boolean;
+  autoSaveInterval: number; // 自动保存间隔（分钟）
+  showNotifications: boolean;
+  soundEnabled: boolean;
+}
+
+// 应用状态接口
+export interface AppState {
+  // 通知系统
+  notifications: Notification[];
+  addNotification: (notification: Omit<Notification, 'id' | 'timestamp'>) => void;
+  removeNotification: (id: string) => void;
+  clearNotifications: () => void;
+
+  // 应用设置
+  settings: AppSettings;
+  updateSettings: (settings: Partial<AppSettings>) => void;
+
+  // UI 状态
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+
+  // 加载状态
+  isLoading: boolean;
+  setLoading: (loading: boolean) => void;
+}
+
+// 默认设置
+const defaultSettings: AppSettings = {
+  theme: 'system',
+  language: 'zh-CN',
+  autoSave: true,
+  autoSaveInterval: 5,
+  showNotifications: true,
+  soundEnabled: false,
+};
+
+/**
+ * 全局应用状态存储
+ * 使用 Zustand 管理应用级别的状态
+ */
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // 初始状态
-      sidebarCollapsed: false,
-      theme: THEME.SYSTEM as Theme,
-      isLoading: false,
-      error: null,
+      // 通知系统
       notifications: [],
-
-      // 动作实现
-      toggleSidebar: () => {
-        set(state => ({ sidebarCollapsed: !state.sidebarCollapsed }));
-      },
-
-      setSidebarCollapsed: collapsed => {
-        set({ sidebarCollapsed: collapsed });
-      },
-
-      setTheme: theme => {
-        set({ theme });
-
-        // 更新 DOM 类名
-        const root = document.documentElement;
-        root.classList.remove('light', 'dark');
-
-        if (theme === THEME.LIGHT) {
-          root.classList.add('light');
-        } else if (theme === THEME.DARK) {
-          root.classList.add('dark');
-        } else {
-          // 系统主题
-          const isDark = window.matchMedia(
-            '(prefers-color-scheme: dark)'
-          ).matches;
-          root.classList.add(isDark ? 'dark' : 'light');
-        }
-      },
-
-      setLoading: loading => {
-        set({ isLoading: loading });
-      },
-
-      setError: error => {
-        set({ error });
-      },
-
-      clearError: () => {
-        set({ error: null });
-      },
-
-      // 通知动作
-      addNotification: notification => {
+      
+      addNotification: (notification) => {
         const id = `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const newNotification = {
+        const newNotification: Notification = {
           ...notification,
           id,
           timestamp: Date.now(),
+          duration: notification.duration ?? (notification.type === 'error' ? 0 : 5000),
         };
 
-        set(state => ({
-          notifications: [...state.notifications, newNotification],
+        set((state) => ({
+          notifications: [newNotification, ...state.notifications].slice(0, 10), // 最多保留10条通知
         }));
 
-        // 自动删除成功通知
-        if (notification.type === 'success') {
+        // 自动移除通知（如果设置了duration且不为0）
+        if (newNotification.duration && newNotification.duration > 0) {
           setTimeout(() => {
             get().removeNotification(id);
-          }, 5000);
+          }, newNotification.duration);
         }
       },
 
-      removeNotification: id => {
-        set(state => ({
+      removeNotification: (id) => {
+        set((state) => ({
           notifications: state.notifications.filter(n => n.id !== id),
         }));
       },
@@ -119,43 +92,37 @@ export const useAppStore = create<AppState>()(
       clearNotifications: () => {
         set({ notifications: [] });
       },
+
+      // 应用设置
+      settings: defaultSettings,
+      
+      updateSettings: (newSettings) => {
+        set((state) => ({
+          settings: { ...state.settings, ...newSettings },
+        }));
+      },
+
+      // UI 状态
+      sidebarCollapsed: false,
+      
+      setSidebarCollapsed: (collapsed) => {
+        set({ sidebarCollapsed: collapsed });
+      },
+
+      // 加载状态
+      isLoading: false,
+      
+      setLoading: (loading) => {
+        set({ isLoading: loading });
+      },
     }),
     {
-      name: STORAGE_KEYS.USER_PREFERENCES,
-      partialize: state => ({
+      name: 'codex-app-store',
+      // 只持久化设置和UI状态，不持久化通知和加载状态
+      partialize: (state) => ({
+        settings: state.settings,
         sidebarCollapsed: state.sidebarCollapsed,
-        theme: state.theme,
       }),
     }
   )
 );
-
-// 选择器函数
-export const appSelectors = {
-  sidebarCollapsed: (state: AppState) => state.sidebarCollapsed,
-  theme: (state: AppState) => state.theme,
-  isLoading: (state: AppState) => state.isLoading,
-  error: (state: AppState) => state.error,
-  notifications: (state: AppState) => state.notifications,
-  hasError: (state: AppState) => !!state.error,
-  notificationCount: (state: AppState) => state.notifications.length,
-};
-
-// 主题监听器
-if (typeof window !== 'undefined') {
-  // 监听系统主题变化
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-  const handleSystemThemeChange = () => {
-    const { theme, setTheme } = useAppStore.getState();
-    if (theme === THEME.SYSTEM) {
-      setTheme(THEME.SYSTEM); // 重新应用系统主题
-    }
-  };
-
-  mediaQuery.addEventListener('change', handleSystemThemeChange);
-
-  // 初始化主题
-  const { theme, setTheme } = useAppStore.getState();
-  setTheme(theme);
-}

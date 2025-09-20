@@ -34,6 +34,14 @@ In the crates folder where the markdown file lives:
 # [Agents](/.claude/agents)
 
 
+使用@tanstack/react-query管理API状态
+使用Zustand管理组件及页面状态
+
+
+- 后端数据库结构设计：crates\database
+- Agent交互事件协议：apps\desktop\src\shared\types\protocol\EventMsg.ts
+- 多智能体协议：crates\codex-multi-agent
+- 后端接口定义：apps\desktop\src-tauri\src\lib.rs
 
 # 开发规范
 
@@ -43,21 +51,6 @@ In the crates folder where the markdown file lives:
 - **务必遵守**类型应该统一,禁止出现因参数类型不一致，而采取的类型转换和字段映射，移除类型不一致的实现，重写相关逻辑
 - **务必遵守**唯一ID统一用uuid生成
 
-
-## 正确示例
-```
-用户："重构项目结构"
-助手：
-1. [方案设计] 我建议使用features架构，具体方案是...
-2. [等待确认] 你觉得这个方案如何？
-用户："同意"
-助手：
-3. [详细规划] 具体执行步骤：第一步创建目录...第二步移动文件...
-4. [再次确认] 是否开始执行这个计划？
-用户："开始"
-助手：
-5. [执行实施] 正在执行第一步...
-```
 
 
 - 导入 invoke

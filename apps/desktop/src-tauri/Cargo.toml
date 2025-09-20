@@ -37,4 +37,8 @@ codex-protocol = { path = "../../../crates/protocol" }
 codex-database = { path = "../../../crates/database" }
 tauri-plugin-updater = "2.9.0"
 tauri-plugin-dialog = "2.4.0"
+tauri-plugin-store = "2.0.0"
+aes-gcm = "0.10"
+base64 = "0.21"
+rand = "0.8"
 

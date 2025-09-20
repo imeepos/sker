@@ -12,7 +12,7 @@ use sha2::{Sha256, Digest};
 use uuid::Uuid;
 use chrono::Utc;
 use std::sync::Arc;
-use tauri::{State, Manager, AppHandle};
+use tauri::State;
 
 /// 认证服务
 #[derive(Clone)]
@@ -33,6 +33,20 @@ pub struct RegisterRequest {
     pub username: String,
     pub email: String,
     pub password: String,
+}
+
+/// 修改密码请求数据
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+/// 更新用户信息请求数据
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserRequest {
+    pub username: Option<String>,
+    pub email: Option<String>,
 }
 
 /// 认证响应数据
@@ -274,6 +288,67 @@ impl AuthService {
         let computed_hash = self.hash_password(password);
         computed_hash == hash
     }
+
+    /// 修改密码
+    pub async fn change_password(&self, user_id: Uuid, request: ChangePasswordRequest) -> Result<(), String> {
+        let user_repo = UserRepository::new(self.db.clone());
+        
+        // 获取用户信息
+        let user = user_repo.find_by_id(user_id).await
+            .map_err(|e| format!("查询用户失败: {}", e))?
+            .ok_or("用户不存在")?;
+        
+        // 验证当前密码
+        if !self.verify_password(&request.current_password, &user.password_hash) {
+            return Err("当前密码错误".to_string());
+        }
+        
+        // 加密新密码
+        let new_password_hash = self.hash_password(&request.new_password);
+        
+        // 更新密码
+        user_repo.update_password(user_id, new_password_hash).await
+            .map_err(|e| format!("更新密码失败: {}", e))?;
+        
+        Ok(())
+    }
+
+    /// 更新用户信息
+    pub async fn update_user(&self, user_id: Uuid, request: UpdateUserRequest) -> Result<UserInfo, String> {
+        let user_repo = UserRepository::new(self.db.clone());
+        
+        // 检查用户名是否已被占用（如果要更新用户名）
+        if let Some(ref username) = request.username {
+            if let Some(existing_user) = user_repo.find_by_username(username).await
+                .map_err(|e| format!("查询用户失败: {}", e))? {
+                if existing_user.user_id != user_id {
+                    return Err("用户名已被占用".to_string());
+                }
+            }
+        }
+        
+        // 检查邮箱是否已被占用（如果要更新邮箱）
+        if let Some(ref email) = request.email {
+            if let Some(existing_user) = user_repo.find_by_email(email).await
+                .map_err(|e| format!("查询用户失败: {}", e))? {
+                if existing_user.user_id != user_id {
+                    return Err("邮箱已被注册".to_string());
+                }
+            }
+        }
+        
+        // 更新用户信息
+        let updated_user = user_repo.update_user_info(user_id, request.username, request.email).await
+            .map_err(|e| format!("更新用户信息失败: {}", e))?;
+        
+        Ok(UserInfo {
+            user_id: updated_user.user_id.to_string(),
+            username: updated_user.username,
+            email: updated_user.email,
+            created_at: updated_user.created_at.to_rfc3339(),
+            profile_data: updated_user.profile_data,
+        })
+    }
 }
 
 // Tauri命令
@@ -283,19 +358,9 @@ impl AuthService {
 pub async fn register(
     request: RegisterRequest,
     db: State<'_, Arc<DatabaseConnection>>,
-    app: AppHandle,
 ) -> Result<AuthResponse, String> {
     let auth_service = AuthService::new((**db).clone());
     let response = auth_service.register(request).await?;
-    
-    // 存储当前用户到应用状态
-    let current_user = CurrentUser {
-        user_id: Uuid::parse_str(&response.user.user_id).unwrap(),
-        username: response.user.username.clone(),
-        email: response.user.email.clone(),
-        session_id: Uuid::new_v4(), // 这里应该从会话中获取
-    };
-    app.manage(current_user);
     
     Ok(response)
 }
@@ -305,19 +370,9 @@ pub async fn register(
 pub async fn login(
     request: LoginRequest,
     db: State<'_, Arc<DatabaseConnection>>,
-    app: AppHandle,
 ) -> Result<AuthResponse, String> {
     let auth_service = AuthService::new((**db).clone());
     let response = auth_service.login(request).await?;
-    
-    // 存储当前用户到应用状态
-    let current_user = CurrentUser {
-        user_id: Uuid::parse_str(&response.user.user_id).unwrap(),
-        username: response.user.username.clone(),
-        email: response.user.email.clone(),
-        session_id: Uuid::new_v4(),
-    };
-    app.manage(current_user);
     
     Ok(response)
 }
@@ -355,13 +410,9 @@ pub async fn refresh_token(
 pub async fn logout(
     token: String,
     db: State<'_, Arc<DatabaseConnection>>,
-    _app: AppHandle,
 ) -> Result<(), String> {
     let auth_service = AuthService::new((**db).clone());
     auth_service.logout(&token).await?;
-    
-    // 清除应用状态中的用户信息
-    // Tauri不提供直接删除状态的方法，我们可以设置为None或使用Arc<Mutex<Option<T>>>
     
     Ok(())
 }
@@ -369,13 +420,48 @@ pub async fn logout(
 /// 获取当前用户信息命令
 #[tauri::command]
 pub async fn get_current_user(
-    current_user: State<'_, CurrentUser>,
+    token: String,
+    db: State<'_, Arc<DatabaseConnection>>,
 ) -> Result<UserInfo, String> {
+    let auth_service = AuthService::new((**db).clone());
+    let current_user = auth_service.validate_token(&token).await?;
+    
+    let user_repo = UserRepository::new((**db).clone());
+    let user = user_repo.find_by_id(current_user.user_id).await
+        .map_err(|e| format!("查询用户失败: {}", e))?
+        .ok_or("用户不存在")?;
+    
     Ok(UserInfo {
         user_id: current_user.user_id.to_string(),
-        username: current_user.username.clone(),
-        email: current_user.email.clone(),
-        created_at: Utc::now().to_rfc3339(),
-        profile_data: None,
+        username: current_user.username,
+        email: current_user.email,
+        created_at: user.created_at.to_rfc3339(),
+        profile_data: user.profile_data,
     })
+}
+
+/// 修改密码命令
+#[tauri::command]
+pub async fn change_password(
+    request: ChangePasswordRequest,
+    token: String,
+    db: State<'_, Arc<DatabaseConnection>>,
+) -> Result<(), String> {
+    let auth_service = AuthService::new((**db).clone());
+    let current_user = auth_service.validate_token(&token).await?;
+    auth_service.change_password(current_user.user_id, request).await
+}
+
+/// 更新用户信息命令
+#[tauri::command]
+pub async fn update_user_info(
+    request: UpdateUserRequest,
+    token: String,
+    db: State<'_, Arc<DatabaseConnection>>,
+) -> Result<UserInfo, String> {
+    let auth_service = AuthService::new((**db).clone());
+    let current_user = auth_service.validate_token(&token).await?;
+    let updated_user = auth_service.update_user(current_user.user_id, request).await?;
+    
+    Ok(updated_user)
 }
